@@ -1,0 +1,8 @@
+{
+  "name": "millionaire-live", "version": "1.0.0", "private": true,
+  "description": "Local quiz show with live audience voting",
+  "scripts": {"start": "node server.js", "test": "node --test", "sounds": "node generate-sounds.js"},
+  "engines": {"node": ">=22"},
+  "dependencies": {"express": "^5.1.0", "socket.io": "^4.8.1", "qrcode": "^1.5.4"},
+  "devDependencies": {"socket.io-client": "^4.8.1"}
+}

@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>من سيربح المليون · شاشة العرض</title><link rel="stylesheet" href="/style.css"></head><body class="projector" data-role="projector"><div id="app" class="shell" ><header><div class="brand"><span class="mark">م</span><div><p class="eyebrow">تحدّي المعلومات العامة</p><h1>من سيربح المليون<span style="color:var(--gold)">.</span></h1></div></div><div class="top-actions"><span id="connection" class="connection offline">جارٍ الاتصال…</span><button id="sound-toggle">تشغيل الصوت</button><button id="fullscreen">ملء الشاشة</button></div></header>
+<p id="message" class="notice" role="status"></p>
+<div class="layout"><main class="stage"><div class="status-line"><span id="level">بانتظار المقدّم</span><span class="prize" id="prize"></span></div>
+<div class="question-card"><p id="phase" class="eyebrow"></p><h2 id="question">رحلة المليون تبدأ بإجابة واحدة.</h2></div><div id="answers" class="answers"></div>
+<div class="lifelines"><button class="lifeline" id="fifty">حذف إجابتين</button><button class="lifeline" id="audience">مساعدة الجمهور</button><button class="lifeline" id="friend">الاتصال بصديق</button></div>
+<div id="outcome" class="banner" role="status" hidden></div>
+<section id="friend-panel" class="panel" hidden><p class="eyebrow">الاتصال بصديق · محاكاة</p><p id="friend-text"></p></section>
+<section id="audience-panel" class="panel" hidden><div class="audience-layout"><div><img id="qr" class="qr" alt="امسح الرمز لفتح صفحة التصويت" width="210" height="210"><a id="vote-link" class="vote-link" target="_blank" rel="noopener"></a></div><div><p class="eyebrow">رأي الجمهور يصنع الفرق</p><h2>ما الإجابة برأيكم؟</h2><p id="vote-count" class="muted"></p><div id="bars"></div><p id="private-results" class="muted" hidden>النتائج ظاهرة على شاشة المقدّم فقط.</p></div></div></section>
+
+</main><aside class="panel ladder-panel"><h2 class="ladder-title">سلّم الجوائز</h2><ol id="ladder" class="ladder"></ol><p class="footer">مبلغ مضمون بعد السؤال الخامس.</p></aside></div><p class="footer">لعبة معلومات عامة · شاشة العرض يتحكّم بها المقدّم</p></div><script src="/socket.io/socket.io.js"></script><script src="/shared.js"></script><script src="/game.js"></script></body></html>

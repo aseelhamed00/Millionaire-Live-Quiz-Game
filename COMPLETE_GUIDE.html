@@ -1,0 +1,2703 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Millionaire Live — Complete project and beginner guide</title><style>
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f4f5fa;color:#1c2440;font:17px/1.7 system-ui,sans-serif}header{background:#101731;color:white;padding:55px max(24px,calc((100vw - 1000px)/2));}header p{color:#ffd17b;letter-spacing:3px;font-size:13px;text-transform:uppercase}header h1{font-size:44px;line-height:1.15;margin:10px 0}main{max-width:1080px;margin:auto;background:white;padding:35px 40px}h1,h2,h3{line-height:1.3}h1{margin-top:36px}h2{margin-top:40px;padding-top:20px;border-top:1px solid #dde1ef}a{color:#4f3cac}code{font-size:.87em;background:#f0f1f7;padding:2px 5px;border-radius:4px}pre{background:#101731;color:#f0f3ff;padding:22px;border-radius:10px;overflow:auto;font-size:14px;line-height:1.6;tab-size:2}pre code{background:none;padding:0;color:inherit;font-size:inherit}table{border-collapse:collapse;width:100%;font-size:15px;margin:22px 0}th,td{text-align:left;vertical-align:top;padding:12px;border:1px solid #dce1ed}th{background:#eef0f8}article{scroll-margin-top:20px}strong{color:#182651}img{width:100%;border-radius:12px}figure{margin:10px 0 35px}figcaption{font-size:13px;color:#667}summary{cursor:pointer;color:#4f3cac}li{margin:7px 0}@media(max-width:650px){main{padding:24px 18px}header{padding:30px 20px}header h1{font-size:34px}table{display:block;overflow:auto}pre{font-size:12px;padding:14px}}@media print{body,main{background:white}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f5f5;color:black}header{background:white;color:black}a{color:inherit}details{display:block}}
+</style></head><body><header><p>Build it · understand it · run the show</p><h1>Millionaire Live</h1><div>Your complete local quiz game and step-by-step source guide.</div></header><main><figure><img src="projector-preview.png" alt="Millionaire projector screen with live audience voting"><figcaption>Projector view from the working application.</figcaption></figure><h1 id="millionaire-live-complete-beginner-guide">Millionaire Live — complete beginner guide</h1>
+<p>A complete local quiz show: four choices, final-answer lock, reveal effects, eight original audio cues, a prize ladder, three once-per-game lifelines, a host desk, a projector screen, and real audience voting through a QR code.</p>
+<p><strong>Start here:</strong> this guide explains every setup step. <code>COMPLETE_GUIDE.html</code> is the illustrated, offline-readable version, with the complete source of every hand-written code file. Open that file in your browser to read it; run the actual game through Node.js, not by double-clicking the game HTML files.</p>
+<h2 id="what-you-are-building">What you are building</h2>
+<p>Your laptop runs one Node.js process. Express serves the pages and files. Socket.IO carries votes, host commands, state updates, and audio events between browsers and the laptop. The <code>qrcode</code> package generates a PNG QR code locally. HTML, CSS, and plain JavaScript build the screens: no frontend framework, database, cloud account, or paid service is required.</p>
+<p>The implementation follows the official <a href="https://socket.io/docs/v4/server-initialization/">Socket.IO Express initialization guide</a> and <a href="https://socket.io/docs/v4/emitting-events/">event acknowledgements documentation</a>. QR generation uses <a href="https://github.com/soldair/node-qrcode">node-qrcode</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Screen</th>
+<th>Laptop URL</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host</td>
+<td>http://localhost:3000/host.html</td>
+<td>Authenticate with the terminal's host code; control the game</td>
+</tr>
+<tr>
+<td>Projector</td>
+<td>http://localhost:3000/</td>
+<td>Public game screen; enable sound here</td>
+</tr>
+<tr>
+<td>Audience</td>
+<td>http://YOUR-LAPTOP-IP:3000/vote.html</td>
+<td>Phones vote here; QR opens this page</td>
+</tr>
+</tbody>
+</table>
+<p>The contestant tells the host their chosen answer, and the host clicks that answer. You can also let a player use the authenticated host screen. The projector itself is intentionally read-only.</p>
+<h2 id="game-rules-and-practical-limits">Game rules and practical limits</h2>
+<ul>
+<li>The first click on a host answer locks it in orange. It does not reveal correctness. <strong>Reveal answer</strong> then shows green for correct or red for wrong, labels the result, and plays the corresponding cues.</li>
+<li>A correct answer unlocks <strong>Next question</strong>. A wrong answer ends the game. The final correct answer wins the highest prize in your question list.</li>
+<li>Every fifth completed question is a safety milestone. Losing before question 5 pays $0; losing after completing question 5 pays its prize; after completing question 10 pays its prize. There is no walk-away button.</li>
+<li>Each lifeline can be used once per game, not once per question. Restart restores all three.</li>
+<li>50:50 removes two randomly selected wrong choices. Stop audience voting before using it. Removed choices remain visible but crossed out and disabled on phones.</li>
+<li>Phone a Friend is explicitly simulated: it recommends the correct answer with 80% probability; otherwise it recommends an available wrong answer. It is not a real phone call.</li>
+<li>Ask the Audience starts a real voting round and displays the QR code. Stop/resume preserves votes. Reset deletes votes, creates a new round, and leaves voting closed until you click Start voting. Reset does not restore the lifeline.</li>
+<li>Locking an answer automatically stops voting. Moving to the next question clears its old poll; it does not make Ask the Audience usable again.</li>
+<li>Percentages are whole numbers, using largest-remainder rounding so they sum to 100 when votes exist. With no votes all four are 0%.</li>
+<li>Duplicate voting is prevented <strong>per browser cookie, per round</strong>, on the server. Refresh, reconnect, and multiple tabs in the same browser do not give additional votes. Clearing cookies, private browsing, another browser, or another device can give another identity. This is not verified one-human-one-vote. Strict enforcement needs individually issued tickets or accounts, outside this simple version.</li>
+<li>This is a trusted local-event app. The random host code protects controls, and the answer key stays on the server until reveal. Plain HTTP on Wi-Fi is not suitable for hostile networks or public Internet hosting.</li>
+<li>Game state and votes live in memory. Browser refresh preserves the running game; stopping/restarting Node.js loses the game and votes and changes the automatically generated host code. Reload phone pages after a server-process restart. There is no crash recovery or multiple simultaneous game rooms.</li>
+<li>All fonts, scripts, QR generation, and sound files work locally after npm installation. Internet is needed to install tools/packages, but ordinary event operation only needs working Wi-Fi between devices.</li>
+</ul>
+<h2 id="step-1-install-the-programs">Step 1 — Install the programs</h2>
+<ol>
+<li>Install the current <strong>LTS</strong> version from <a href="https://nodejs.org/en/download">nodejs.org</a>. This project requires Node.js 22 or newer. npm comes with Node.js. Use the normal Windows installer and keep its PATH option enabled.</li>
+<li>Install <a href="https://code.visualstudio.com/">Visual Studio Code</a>.</li>
+<li>Use a modern Chrome, Edge, Firefox, or Safari browser. Audience phones do not need Node.js or an app.</li>
+<li>Open a new terminal after installing Node.js. In VS Code use <strong>Terminal → New Terminal</strong>. On Windows, choose <strong>Command Prompt</strong> from the terminal dropdown for the commands in this guide.</li>
+</ol>
+<p>Run these two separate commands:</p>
+<pre><code class="language-bat">node --version
+npm --version
+</code></pre>
+<p>Both should print version numbers. You do not need Docker, Git, a database, XAMPP, or a VS Code Live Server extension.</p>
+<h2 id="step-2-create-or-extract-the-project-folder">Step 2 — Create or extract the project folder</h2>
+<p><strong>Fastest route:</strong> extract <code>millionaire-live.zip</code>. It already contains the <code>millionaire</code> folder and all source files, sounds, questions, and guides. Work inside that folder; skip <code>npm init</code> because package.json already exists.</p>
+<p><strong>Learn-from-zero route:</strong> open Command Prompt in your chosen parent folder and run:</p>
+<pre><code class="language-bat">mkdir millionaire
+cd millionaire
+mkdir public
+mkdir public\sounds
+mkdir test
+</code></pre>
+<p>The complete source appendix in <code>COMPLETE_GUIDE.html</code> provides every file's name, location, purpose, and entire code. The empty-folder route reconstructs exactly the same app.</p>
+<h2 id="step-3-open-it-in-vs-code">Step 3 — Open it in VS Code</h2>
+<p>From the <code>millionaire</code> folder:</p>
+<pre><code class="language-bat">code .
+</code></pre>
+<p>If <code>code</code> is not recognized, open VS Code normally, select <strong>File → Open Folder</strong>, and choose <code>millionaire</code>. Open its terminal. Run <code>dir</code> on Windows and confirm you are in the intended folder. After creating the files, <code>package.json</code> and <code>server.js</code> must appear here, not in <code>public</code>.</p>
+<h2 id="step-4-initialize-nodejs">Step 4 — Initialize Node.js</h2>
+<p>For the empty-folder route only:</p>
+<pre><code class="language-bat">npm init -y
+</code></pre>
+<p>This generates a starter package.json. Replace its entire contents with the <code>package.json</code> in the complete source appendix. The supplied file defines the start, test, and sound-generation commands and all required packages. For the extracted project, simply keep its supplied package.json and package-lock.json.</p>
+<h2 id="step-5-install-packages">Step 5 — Install packages</h2>
+<p>With the supplied package.json saved, run:</p>
+<pre><code class="language-bat">npm install
+</code></pre>
+<p>This installs Express (HTTP pages), Socket.IO (live communication), qrcode (QR image generation), and socket.io-client (automated test clients). It creates <code>node_modules</code>; do not paste code into that folder. The included package-lock.json records the dependency versions tested with this download. For a clean repeat installation from the archive, <code>npm ci</code> is an alternative to <code>npm install</code>.</p>
+<p>For reference, the equivalent explicit installation commands when building a fresh project are:</p>
+<pre><code class="language-bat">npm install express@^5.1.0 socket.io@^4.8.1 qrcode@^1.5.4
+npm install --save-dev socket.io-client@^4.8.1
+</code></pre>
+<p>You do not need to run both installation methods. Keep the supplied scripts in package.json.</p>
+<h2 id="step-6-create-the-files-in-the-correct-places">Step 6 — Create the files in the correct places</h2>
+<p>Use VS Code's Explorer → New File/New Folder. Paths below are relative to the main <code>millionaire</code> folder. Never save <code>server.js</code> inside <code>public</code>: only public files are served to browsers.</p>
+<table>
+<thead>
+<tr>
+<th>File to create</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>package.json</td>
+<td>Packages, Node version, terminal commands</td>
+</tr>
+<tr>
+<td>questions.json</td>
+<td>Private question bank, answers, difficulty, prizes</td>
+</tr>
+<tr>
+<td>server.js</td>
+<td>Authoritative game state, authentication, vote validation, QR, networking</td>
+</tr>
+<tr>
+<td>generate-sounds.js</td>
+<td>Creates eight original WAV sound files</td>
+</tr>
+<tr>
+<td>public/index.html</td>
+<td>Projector page structure</td>
+</tr>
+<tr>
+<td>public/host.html</td>
+<td>Host login and controls</td>
+</tr>
+<tr>
+<td>public/vote.html</td>
+<td>Audience phone page</td>
+</tr>
+<tr>
+<td>public/style.css</td>
+<td>Responsive navy/gold design and answer effects</td>
+</tr>
+<tr>
+<td>public/shared.js</td>
+<td>Shared formatting, percentage bars, audio, fullscreen</td>
+</tr>
+<tr>
+<td>public/game.js</td>
+<td>Projector rendering and host actions</td>
+</tr>
+<tr>
+<td>public/vote.js</td>
+<td>Phone connection, vote submission, duplicate-vote UI</td>
+</tr>
+<tr>
+<td>test/game.test.js</td>
+<td>Automated server and real-time integration tests</td>
+</tr>
+<tr>
+<td>.gitignore</td>
+<td>Keeps node_modules and optional .env out of Git</td>
+</tr>
+</tbody>
+</table>
+<h2 id="step-7-paste-the-complete-code-progressively">Step 7 — Paste the complete code progressively</h2>
+<p>In the complete source appendix, each file has its exact name, relative location, purpose, and complete source. Copy the entire code block into that file and save with Ctrl+S. There are no omitted sections or TODO implementations.</p>
+<p>A useful reading/build order is:</p>
+<ol>
+<li><code>package.json</code>, <code>questions.json</code>, and <code>generate-sounds.js</code>: dependencies, data, audio assets.</li>
+<li><code>server.js</code>: follow <code>reset</code>, <code>publicState</code>, the vote handler, then host commands.</li>
+<li>The three HTML files: see which elements each screen contains.</li>
+<li><code>style.css</code> and <code>shared.js</code>: appearance, bars, sound playback.</li>
+<li><code>game.js</code> and <code>vote.js</code>: connect buttons and sockets to those elements.</li>
+<li><code>test/game.test.js</code>: exercise the complete system.</li>
+</ol>
+<p>JSON uses double quotes, does not allow comments, and cannot have a trailing comma. JavaScript and CSS may contain comments. File extensions must be real: enable File Explorer → View → Show → File name extensions if necessary to avoid <code>server.js.txt</code>.</p>
+<h2 id="step-8-add-the-sounds">Step 8 — Add the sounds</h2>
+<p>The archive already includes these files inside <code>public/sounds</code>:</p>
+<pre><code class="language-text">question.wav
+lock.wav
+correct.wav
+wrong.wav
+lifeline.wav
+next.wav
+win.wav
+lose.wav
+</code></pre>
+<p>If reconstructing manually, or to regenerate them, run:</p>
+<pre><code class="language-bat">npm run sounds
+</code></pre>
+<p>This writes complete WAV files; no manual download or recording is required. The sounds are original short synthesized cues, not recordings from the TV show. You can replace a WAV with your own licensed WAV using the same filename. Reload the projector afterwards because it caches decoded sounds in memory. Running <code>npm run sounds</code> again overwrites your replacements.</p>
+<p>Audio must be enabled with a click on the actual projector page. Browsers restrict automatic audio before interaction. <strong>Enable sound</strong> loads all cues, unlocks playback, and plays a short test cue. Use only one audible page to avoid echo. The sound desk sends cues to all enabled host/projector pages, but never to audience phones.</p>
+<h2 id="step-9-run-the-server">Step 9 — Run the server</h2>
+<p>From the main project folder:</p>
+<pre><code class="language-bat">npm test
+npm start
+</code></pre>
+<p>You should see host and projector URLs, a random <strong>Host code</strong>, and candidate local IP addresses. Leave the terminal open. Ctrl+C stops the server. If automatic IP detection is unavailable, the game still runs; find your IP manually in Step 13.</p>
+<p>Optional: to choose a reusable host code, use a long private value. These are Command Prompt commands; replace the example:</p>
+<pre><code class="language-bat">set HOST_PIN=replace-with-a-long-private-code
+npm start
+</code></pre>
+<p>For PowerShell the equivalent is:</p>
+<pre><code class="language-powershell">$env:HOST_PIN=&quot;replace-with-a-long-private-code&quot;
+npm start
+</code></pre>
+<p>Do not show the terminal or host code on the projector. A <code>.env</code> file is not loaded automatically by this project.</p>
+<h2 id="step-10-open-the-host-and-game">Step 10 — Open the host and game</h2>
+<p>On the laptop open:</p>
+<pre><code class="language-text">http://localhost:3000/host.html
+http://localhost:3000/
+</code></pre>
+<p>Log into the host page with the code printed in the terminal. Open the projector page in a separate window. Click <strong>Enable sound</strong> on the projector and <strong>Full screen</strong> (or F11). Keep host audio muted. Click <strong>Start game</strong> on the host. The first question appears on both screens.</p>
+<p>Click an answer on the host to lock it. Pause for suspense. Click <strong>Reveal answer</strong>. If correct, click <strong>Next question</strong>; if wrong, the game ends and you can use <strong>Restart game</strong> for another contestant.</p>
+<h2 id="step-11-open-a-voting-page-locally-first">Step 11 — Open a voting page locally first</h2>
+<p>For a quick laptop-only check, open:</p>
+<pre><code class="language-text">http://localhost:3000/vote.html
+</code></pre>
+<p>Before Ask the Audience is activated, choices are disabled and the page waits. On the host click <strong>Ask the Audience</strong>. Now choose one answer on the voting page. The host and projector receive the count immediately. A second vote from the same browser is blocked.</p>
+<p>This localhost test proves the app works on the laptop. It does not prove phones can reach it. Complete the next two steps for that.</p>
+<h2 id="step-12-configure-and-use-the-qr-code">Step 12 — Configure and use the QR code</h2>
+<p>Suppose your laptop's actual Wi-Fi IPv4 address is <code>192.168.1.25</code>. This is only an example; use your own value.</p>
+<p>In the host's <strong>Audience address</strong> input enter:</p>
+<pre><code class="language-text">http://192.168.1.25:3000
+</code></pre>
+<p>Click <strong>Update QR address</strong>. The resulting QR contains exactly:</p>
+<pre><code class="language-text">http://192.168.1.25:3000/vote.html
+</code></pre>
+<p>The server generates the QR PNG; the host and projector show it when Ask the Audience is active. A text link appears below it as a fallback. No external QR website is used. The QR opens the live voting page, not a snapshot of a particular question. That page receives the current question and voting-round ID from the server.</p>
+<p>Scan with the phone's camera and open the link in the phone's normal browser. Keep this page open for the round. The host can hide projector results with <strong>Hide projector results</strong> while still seeing their own bars. This also hides detailed percentages on phones. Vote totals remain visible.</p>
+<h2 id="step-13-connect-audience-phones-over-the-same-wi-fi">Step 13 — Connect audience phones over the same Wi-Fi</h2>
+<h3 id="localhost-versus-your-laptops-ip">localhost versus your laptop's IP</h3>
+<p><code>localhost</code> means <strong>the device on which the browser is running</strong>. On your laptop it refers to the laptop. On an audience phone it refers to that phone, so a QR containing localhost cannot work for the audience. <code>0.0.0.0</code> is the server's listen address, not an address to put in the QR. <code>127.0.0.1</code> also means the current device.</p>
+<p>A LAN address such as <code>192.168.1.25</code> identifies your laptop on the local network. The server listens on all interfaces so other devices can reach it. Port <code>3000</code> identifies this app.</p>
+<h3 id="find-the-wi-fi-ipv4-address-on-windows">Find the Wi-Fi IPv4 address on Windows</h3>
+<ol>
+<li>Connect the laptop to the event's trusted Wi-Fi.</li>
+<li>Press Windows+R, type <code>cmd</code>, press Enter.</li>
+<li>Run:</li>
+</ol>
+<pre><code class="language-bat">ipconfig
+</code></pre>
+<ol>
+<li>Find <strong>Wireless LAN adapter Wi-Fi</strong>, then <strong>IPv4 Address</strong>. Use that address, not Default Gateway, IPv6, VPN, Bluetooth, WSL, or a virtual adapter.</li>
+<li>Alternatively, use Settings → Network &amp; internet → Wi-Fi → your connected network's properties and find IPv4 address. Microsoft's <a href="https://support.microsoft.com/en-us/windows/experience/connectivity-networking/essential-network-settings-and-tasks-in-windows">network settings guide</a> describes this.</li>
+<li>Put <code>http://THAT-IP:3000</code> in the host's Audience address and click Update QR address.</li>
+<li>Connect all phones to the same Wi-Fi. On one phone manually type <code>http://THAT-IP:3000/vote.html</code> before relying on scanning.</li>
+<li>Once manual access works, scan the QR from the actual projector position.</li>
+</ol>
+<p>All phones talk directly to the Node.js process on the laptop. They do not need their own server, installation, login, or Socket.IO configuration. The voting page loads the Socket.IO client from the laptop itself.</p>
+<h3 id="windows-firewall">Windows Firewall</h3>
+<p>If Windows asks whether Node.js may communicate, allow it for the <strong>Private</strong> trusted event network. If you previously denied it, open Windows Security → Firewall &amp; network protection → Allow an app through firewall → Change settings. Allow the Node.js JavaScript Runtime on Private networks; its executable is often <code>C:\Program Files\nodejs\node.exe</code>. Administrative permission may be needed. Keep the firewall enabled. Microsoft documents <a href="https://support.microsoft.com/en-us/windows/security/windows-security/firewall-and-network-protection-in-the-windows-security-app">app exceptions and network profiles here</a>.</p>
+<p>If an app exception is unavailable, an event administrator can create a narrow inbound TCP rule for port 3000 on the Private profile and Local Subnet. Do not change university-managed firewall policy without its administrator. Only classify a network as Private when it is one you trust.</p>
+<h3 id="connection-troubleshooting-in-order">Connection troubleshooting, in order</h3>
+<ol>
+<li>Does <code>http://localhost:3000/</code> work on the laptop? If not, start the server and check its terminal error.</li>
+<li>Does <code>http://YOUR-IP:3000/vote.html</code> work on the laptop? Check the correct IP and port.</li>
+<li>Does the exact same URL work when typed manually on a phone? Check Wi-Fi, firewall, and network isolation before blaming the QR.</li>
+<li>Type <strong>http://</strong>, not https://. This local server does not configure TLS.</li>
+<li>Check the phone stayed on Wi-Fi. Some phones switch to mobile data when a Wi-Fi network has no Internet. Temporarily disable cellular data for this test.</li>
+<li>Disconnect VPN software if permitted and appropriate; it can change routes or prevent LAN access.</li>
+<li>Guest/campus Wi-Fi can isolate clients even on the same Wi-Fi name. Ask the network administrator for client-to-client connectivity, or use a tested private router/travel router or hotspot that permits communication between connected devices. Do not assume every hotspot permits it.</li>
+<li>Check the laptop did not sleep, disconnect, change IP, or close its server terminal. IP addresses can change after reconnecting; update the QR address and scan again.</li>
+<li>No router port forwarding is needed for devices on the same LAN. Do not expose this simple server to the public Internet.</li>
+</ol>
+<p>Use one consistent IP-based voting URL during the event. Cookies are tied to the host name/IP: using multiple host aliases can produce separate browser identities.</p>
+<h2 id="step-14-test-real-time-voting">Step 14 — Test real-time voting</h2>
+<ol>
+<li>Start/restart the game and click Start game.</li>
+<li>Configure the real LAN address and scan the QR after Ask the Audience.</li>
+<li>Have at least two different phones join. Vote A on one and B on the other: the host should show 50%, 50%, 0%, 0%.</li>
+<li>A third phone voting B produces 33%, 67%, 0%, 0%.</li>
+<li>Refresh the first phone: it should still show its recorded A vote and disabled choices.</li>
+<li>Open another tab in the same phone browser: it should recognize the existing vote. Opening a different browser tests a different identity, not a duplicate from the same browser.</li>
+<li>Stop voting: new submissions are blocked. Start voting: existing voters remain blocked while new voters can vote.</li>
+<li>Reset votes, then Start voting: all phones can submit once again and counts start at zero. Old delayed submissions cannot enter the new round.</li>
+<li>Hide projector results: host bars remain; projector/phone percentages are hidden. Show them again.</li>
+<li>Lock an answer: voting closes. Reveal and advance: the old poll panel disappears.</li>
+</ol>
+<p>A venue rehearsal with the intended number of phones matters: automated tests cannot certify your router, Wi-Fi isolation, projector legibility, or speaker volume.</p>
+<h2 id="step-15-test-the-sounds-and-lifelines">Step 15 — Test the sounds and lifelines</h2>
+<p>Use the host sound desk to play each of question, lock, correct, wrong, lifeline, next, win, lose. Confirm the projector is audible, host audio is off, and the volume is comfortable. The outcome sequence is correct then win on the final question; wrong then lose on an incorrect answer. Cues play in sequence, not all on top of each other.</p>
+<p>On question 1, B (Mars) is correct. Use it to test a correct reveal, then restart and choose A for a wrong reveal. Test 50:50 and verify B remains and exactly two wrong answers are crossed out. Use Phone a Friend once and check a recommendation appears. Each lifeline button then stays unavailable for the rest of the game.</p>
+<p>To test a quick win without answering all 15 questions, back up questions.json, temporarily keep only question 1, restart Node.js, answer B and reveal. Restore the original file and restart Node.js afterwards. The automated tests already cover the full 15-question win.</p>
+<h2 id="step-16-run-the-complete-game-at-an-event">Step 16 — Run the complete game at an event</h2>
+<p>Use Windows+P → <strong>Extend</strong> so the projector shows only the public game window and your laptop shows the host desk. Drag the projector browser window to the second display and maximize/fullscreen it. With Duplicate mode, the audience can see whatever you do on your laptop, including the host desk.</p>
+<p>Open the server well before the event, connect your speakers/projector, and enable sound on the projector browser. Plug in laptop power and temporarily prevent sleep. Rehearse with two real phones. Then restart the game using the host button, which restores lifelines and clears the rehearsal votes without changing the host login or audience URL.</p>
+<p>During play: read the question; take the contestant's final answer; click it to lock; reveal; proceed after a correct answer. If the contestant requests a lifeline, activate it before locking. For audience voting, allow time to scan, announce the voting period, stop voting when ready, discuss the results, then lock the contestant's choice. Results update live; there is no automatic voting timer.</p>
+<h2 id="add-remove-or-edit-questions">Add, remove, or edit questions</h2>
+<p>Edit <code>questions.json</code> in the main folder. It is never served as a public static file. The array order is the play order. One complete question object looks like:</p>
+<pre><code class="language-json">{
+  &quot;text&quot;: &quot;Which planet is known as the Red Planet?&quot;,
+  &quot;choices&quot;: [&quot;Venus&quot;, &quot;Mars&quot;, &quot;Jupiter&quot;, &quot;Mercury&quot;],
+  &quot;correct&quot;: &quot;B&quot;,
+  &quot;level&quot;: 1,
+  &quot;difficulty&quot;: &quot;Easy&quot;,
+  &quot;prize&quot;: 100
+}
+</code></pre>
+<p><code>choices[0]</code> is A, <code>[1]</code> is B, <code>[2]</code> is C, <code>[3]</code> is D. Use exactly four nonempty strings and one correct letter. <code>level</code> must match its position starting at 1. <code>difficulty</code> is a display label. <code>prize</code> is a positive number without <code>$</code> or commas and must increase from one question to the next.</p>
+<ul>
+<li><strong>Edit:</strong> replace text or choice strings; update the correct letter if you rearrange answers.</li>
+<li><strong>Add:</strong> insert another complete object separated by a comma. Renumber levels and increase prizes. Any nonempty number of questions works.</li>
+<li><strong>Remove:</strong> delete the whole object and its separating comma appropriately. Renumber remaining levels. The highest remaining question becomes the winning question.</li>
+<li><strong>Apply changes:</strong> save, stop Node.js with Ctrl+C, run <code>npm start</code> again, reload all pages, and use the new host code. The host's Restart game button does not reload the JSON from disk.</li>
+</ul>
+<p>The initial bank includes 15 questions from $100 to $1,000,000. Arabic question text can be placed in the same JSON strings and saved as UTF-8; the supplied interface labels are English. To change the currency display, edit the <code>money</code> function in <code>public/shared.js</code>.</p>
+<h2 id="how-the-code-works">How the code works</h2>
+<p>The server owns the game. Browsers display a copy of its state and send requests; they cannot independently change the prize, correct answer, lifeline usage, or vote totals.</p>
+<p>A host connects to the <code>/host</code> Socket.IO namespace with its code. Commands carry a revision number so repeated or outdated commands do not accidentally operate on a changed game. A phone first receives a server-signed, HttpOnly browser cookie, then connects and submits its selected letter with the current poll ID. The server checks the signature, open/closed state, round ID, choice, eliminated answers, and previous votes before accepting it. It broadcasts fresh state and acknowledges the vote. Reconnection fetches current state and recorded vote status.</p>
+<p>Question answers are withheld from public state until Reveal. Hiding results removes detailed counts and percentages from the public socket, rather than only hiding a CSS element. The host still receives them. Phone a Friend necessarily exposes its simulated recommendation, and 50:50 necessarily narrows possible answers.</p>
+<h2 id="full-testing-checklist">Full testing checklist</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host login with wrong code</td>
+<td>Rejected; no game control</td>
+</tr>
+<tr>
+<td>Host login with terminal code</td>
+<td>Desk opens</td>
+</tr>
+<tr>
+<td>Initial screen</td>
+<td>Ready state; Start game enables first question</td>
+</tr>
+<tr>
+<td>Correct selection</td>
+<td>Orange locked state before revealing</td>
+</tr>
+<tr>
+<td>Correct reveal</td>
+<td>Green answer, Correct label, correct cue, next enabled</td>
+</tr>
+<tr>
+<td>Wrong reveal</td>
+<td>Wrong choice red, correct choice green, wrong/lose cues, game over</td>
+</tr>
+<tr>
+<td>Sound toggle</td>
+<td>Click enables test cue; mute stops output on that page</td>
+</tr>
+<tr>
+<td>Manual sound desk</td>
+<td>Every named cue plays on enabled screen</td>
+</tr>
+<tr>
+<td>50:50</td>
+<td>Exactly two wrong answers disabled; correct remains</td>
+</tr>
+<tr>
+<td>50:50 during voting</td>
+<td>Unavailable until voting stops</td>
+</tr>
+<tr>
+<td>Phone a Friend</td>
+<td>Simulated recommendation appears, can be wrong</td>
+</tr>
+<tr>
+<td>Lifeline reuse</td>
+<td>Rejected for all three until game restart</td>
+</tr>
+<tr>
+<td>QR scan</td>
+<td>Opens laptop IP URL, not localhost</td>
+</tr>
+<tr>
+<td>Multiple phones</td>
+<td>Each browser contributes one vote; live total updates</td>
+</tr>
+<tr>
+<td>Zero votes</td>
+<td>0%, 0%, 0%, 0%</td>
+</tr>
+<tr>
+<td>1 vote each for A/B/C</td>
+<td>34%, 33%, 33%, 0%; sums to 100</td>
+</tr>
+<tr>
+<td>3 A / 12 B / 4 C / 1 D</td>
+<td>15%, 60%, 20%, 5%</td>
+</tr>
+<tr>
+<td>Duplicate vote</td>
+<td>Same identity rejected, count unchanged</td>
+</tr>
+<tr>
+<td>Refresh/reconnect</td>
+<td>Original vote recognized and controls remain disabled</td>
+</tr>
+<tr>
+<td>Stop/resume voting</td>
+<td>Counts retained; only previously unvoted identities can vote</td>
+</tr>
+<tr>
+<td>Reset voting</td>
+<td>Count zero, closed until reopened; each identity can vote again</td>
+</tr>
+<tr>
+<td>Delayed old-round vote</td>
+<td>Rejected</td>
+</tr>
+<tr>
+<td>Hide results</td>
+<td>Host sees bars, projector and phones do not</td>
+</tr>
+<tr>
+<td>Lock while voting</td>
+<td>Voting closes immediately</td>
+</tr>
+<tr>
+<td>Next question</td>
+<td>New question, cleared selection/friend/poll, lifelines stay used</td>
+</tr>
+<tr>
+<td>Restart game</td>
+<td>First ready screen, zero winnings/votes, restored lifelines</td>
+</tr>
+<tr>
+<td>Last correct answer</td>
+<td>Win state and win cue; no next button enabled</td>
+</tr>
+<tr>
+<td>Wrong after safety milestone</td>
+<td>Last completed milestone payout</td>
+</tr>
+<tr>
+<td>Disconnected phone</td>
+<td>Disconnection message; buttons disabled until reconnected</td>
+</tr>
+<tr>
+<td>Mobile layout</td>
+<td>No horizontal scrolling; four large touch targets</td>
+</tr>
+<tr>
+<td>Projector visibility</td>
+<td>Question, choices, and QR readable from audience seats</td>
+</tr>
+</tbody>
+</table>
+<p>Run the included automated suite with <code>npm test</code>. It checks 12 groups including authentication, state transitions, lifelines, 20 simultaneous connected voting clients, duplicate/reconnect protection, reset rounds, percentage calculation, QR responses, audio assets, final victory, and safety payouts. Physical Wi-Fi and audible output still require your local checklist.</p>
+<h2 id="common-errors-and-fixes">Common errors and fixes</h2>
+<table>
+<thead>
+<tr>
+<th>Error or symptom</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>node</code> or <code>npm</code> not recognized</td>
+<td>Install Node LTS, close and reopen terminal/VS Code, check PATH</td>
+</tr>
+<tr>
+<td><code>npm.ps1 cannot be loaded</code></td>
+<td>Switch VS Code terminal to Command Prompt, or use <code>npm.cmd install</code> / <code>npm.cmd start</code> in PowerShell</td>
+</tr>
+<tr>
+<td><code>ENOENT ... package.json</code></td>
+<td>Run commands inside the main millionaire folder</td>
+</tr>
+<tr>
+<td><code>Cannot find module express</code></td>
+<td>Run <code>npm install</code> in that folder</td>
+</tr>
+<tr>
+<td>npm download fails</td>
+<td>Connect to Internet for setup, check proxy/campus policy, then retry</td>
+</tr>
+<tr>
+<td><code>EADDRINUSE ... 3000</code></td>
+<td>Stop the previous server with Ctrl+C, or select another port as below</td>
+</tr>
+<tr>
+<td>JSON syntax/invalid question error</td>
+<td>Check double quotes, commas, exactly four choices, letter A-D, sequential levels, increasing numeric prizes</td>
+</tr>
+<tr>
+<td>Screen opened as <code>file:///...</code></td>
+<td>Start Node and use http://localhost:3000; do not open public HTML directly</td>
+</tr>
+<tr>
+<td>Live Server port 5500 does not vote</td>
+<td>Use the Node server on port 3000; Live Server does not run this backend</td>
+</tr>
+<tr>
+<td>Phone cannot connect</td>
+<td>Follow Step 13: correct LAN IPv4, same Wi-Fi, private firewall exception, no client isolation</td>
+</tr>
+<tr>
+<td>QR opens wrong address</td>
+<td>Set actual LAN origin in Host → Audience address and click Update QR address</td>
+</tr>
+<tr>
+<td>Wrong host code after restarting Node</td>
+<td>Copy the newly printed code; a random code is regenerated each server start</td>
+</tr>
+<tr>
+<td>Too many login attempts</td>
+<td>Wait one minute, then enter the correct code</td>
+</tr>
+<tr>
+<td>No sound</td>
+<td>Click Enable sound on speaker/projector page; check OS/tab volume; regenerate missing WAVs and refresh</td>
+</tr>
+<tr>
+<td>Sound from two windows</td>
+<td>Mute the host page; enable only projector audio</td>
+</tr>
+<tr>
+<td>Voting button disabled</td>
+<td>Host must activate audience and open voting; you may already have voted, answer may be removed, or connection may be lost</td>
+</tr>
+<tr>
+<td>After server restart phone asks for cookies/reload</td>
+<td>Reload voting page to get a newly signed identity</td>
+</tr>
+<tr>
+<td>Private/incognito browser can vote again</td>
+<td>Expected limitation of browser-identity voting; see practical limits</td>
+</tr>
+<tr>
+<td>Question changes not appearing</td>
+<td>Restart Node; host Restart game does not reread questions.json</td>
+</tr>
+<tr>
+<td>Votes disappear after Node stops</td>
+<td>State is intentionally in memory; keep terminal running during the event</td>
+</tr>
+</tbody>
+</table>
+<p>To change the port in Windows Command Prompt:</p>
+<pre><code class="language-bat">set PORT=3001
+npm start
+</code></pre>
+<p>In PowerShell:</p>
+<pre><code class="language-powershell">$env:PORT=&quot;3001&quot;
+npm start
+</code></pre>
+<p>Now open <code>http://localhost:3001/host.html</code> and <code>http://localhost:3001/</code>. Set the audience address to <code>http://YOUR-IP:3001</code> and adjust any port-specific firewall exception. The default QR origin remains localhost:3000 unless configured, so always set the correct audience address before voting. Optionally set <code>PUBLIC_URL</code> to the exact audience origin before starting, using the same environment-variable syntax.</p><section id="source"><h1>Complete source appendix</h1><p>All code below is complete. Create each file at the stated location inside your millionaire folder, then paste the entire code block. The download already contains the same files.</p><ul><li><a href="#file-0">package.json</a></li><li><a href="#file-1">questions.json</a></li><li><a href="#file-2">generate-sounds.js</a></li><li><a href="#file-3">server.js</a></li><li><a href="#file-4">public/index.html</a></li><li><a href="#file-5">public/host.html</a></li><li><a href="#file-6">public/vote.html</a></li><li><a href="#file-7">public/style.css</a></li><li><a href="#file-8">public/shared.js</a></li><li><a href="#file-9">public/game.js</a></li><li><a href="#file-10">public/vote.js</a></li><li><a href="#file-11">test/game.test.js</a></li><li><a href="#file-12">.gitignore</a></li><li><a href="#file-13">package-lock.json</a></li></ul><article id="file-0"><h2>1. package.json</h2><p><strong>File name:</strong> package.json<br><strong>Create it in:</strong> Project root<br><strong>Full relative path:</strong> <code>millionaire/package.json</code><br><strong>Purpose:</strong> Defines all npm packages and runnable scripts.</p><pre><code>{
+  &quot;name&quot;: &quot;millionaire-live&quot;, &quot;version&quot;: &quot;1.0.0&quot;, &quot;private&quot;: true,
+  &quot;description&quot;: &quot;Local quiz show with live audience voting&quot;,
+  &quot;scripts&quot;: {&quot;start&quot;: &quot;node server.js&quot;, &quot;test&quot;: &quot;node --test&quot;, &quot;sounds&quot;: &quot;node generate-sounds.js&quot;},
+  &quot;engines&quot;: {&quot;node&quot;: &quot;&gt;=22&quot;},
+  &quot;dependencies&quot;: {&quot;express&quot;: &quot;^5.1.0&quot;, &quot;socket.io&quot;: &quot;^4.8.1&quot;, &quot;qrcode&quot;: &quot;^1.5.4&quot;},
+  &quot;devDependencies&quot;: {&quot;socket.io-client&quot;: &quot;^4.8.1&quot;}
+}
+</code></pre></article><article id="file-1"><h2>2. questions.json</h2><p><strong>File name:</strong> questions.json<br><strong>Create it in:</strong> Project root<br><strong>Full relative path:</strong> <code>millionaire/questions.json</code><br><strong>Purpose:</strong> Private editable question bank. Never put it in public/.</p><pre><code>[
+  {&quot;text&quot;:&quot;Which planet is known as the Red Planet?&quot;,&quot;choices&quot;:[&quot;Venus&quot;,&quot;Mars&quot;,&quot;Jupiter&quot;,&quot;Mercury&quot;],&quot;correct&quot;:&quot;B&quot;,&quot;level&quot;:1,&quot;difficulty&quot;:&quot;Easy&quot;,&quot;prize&quot;:100},
+  {&quot;text&quot;:&quot;How many sides does a hexagon have?&quot;,&quot;choices&quot;:[&quot;Five&quot;,&quot;Seven&quot;,&quot;Eight&quot;,&quot;Six&quot;],&quot;correct&quot;:&quot;D&quot;,&quot;level&quot;:2,&quot;difficulty&quot;:&quot;Easy&quot;,&quot;prize&quot;:200},
+  {&quot;text&quot;:&quot;What does CPU stand for?&quot;,&quot;choices&quot;:[&quot;Central Processing Unit&quot;,&quot;Computer Power Utility&quot;,&quot;Central Program User&quot;,&quot;Control Processing Usage&quot;],&quot;correct&quot;:&quot;A&quot;,&quot;level&quot;:3,&quot;difficulty&quot;:&quot;Easy&quot;,&quot;prize&quot;:300},
+  {&quot;text&quot;:&quot;Which ocean is the largest?&quot;,&quot;choices&quot;:[&quot;Atlantic&quot;,&quot;Indian&quot;,&quot;Pacific&quot;,&quot;Arctic&quot;],&quot;correct&quot;:&quot;C&quot;,&quot;level&quot;:4,&quot;difficulty&quot;:&quot;Easy&quot;,&quot;prize&quot;:500},
+  {&quot;text&quot;:&quot;What is the chemical symbol for gold?&quot;,&quot;choices&quot;:[&quot;Ag&quot;,&quot;Au&quot;,&quot;Fe&quot;,&quot;Gd&quot;],&quot;correct&quot;:&quot;B&quot;,&quot;level&quot;:5,&quot;difficulty&quot;:&quot;Easy&quot;,&quot;prize&quot;:1000},
+  {&quot;text&quot;:&quot;What is the decimal value of binary 1010?&quot;,&quot;choices&quot;:[&quot;8&quot;,&quot;12&quot;,&quot;9&quot;,&quot;10&quot;],&quot;correct&quot;:&quot;D&quot;,&quot;level&quot;:6,&quot;difficulty&quot;:&quot;Medium&quot;,&quot;prize&quot;:2000},
+  {&quot;text&quot;:&quot;Which data structure normally follows FIFO order?&quot;,&quot;choices&quot;:[&quot;Queue&quot;,&quot;Stack&quot;,&quot;Tree&quot;,&quot;Set&quot;],&quot;correct&quot;:&quot;A&quot;,&quot;level&quot;:7,&quot;difficulty&quot;:&quot;Medium&quot;,&quot;prize&quot;:4000},
+  {&quot;text&quot;:&quot;Which gas makes up most of Earth&#x27;s atmosphere?&quot;,&quot;choices&quot;:[&quot;Oxygen&quot;,&quot;Carbon dioxide&quot;,&quot;Nitrogen&quot;,&quot;Hydrogen&quot;],&quot;correct&quot;:&quot;C&quot;,&quot;level&quot;:8,&quot;difficulty&quot;:&quot;Medium&quot;,&quot;prize&quot;:8000},
+  {&quot;text&quot;:&quot;Which of these numbers is prime?&quot;,&quot;choices&quot;:[&quot;91&quot;,&quot;97&quot;,&quot;99&quot;,&quot;93&quot;],&quot;correct&quot;:&quot;B&quot;,&quot;level&quot;:9,&quot;difficulty&quot;:&quot;Medium&quot;,&quot;prize&quot;:16000},
+  {&quot;text&quot;:&quot;In an ideal circuit, 12 volts across 4 ohms produces how much current?&quot;,&quot;choices&quot;:[&quot;48 A&quot;,&quot;8 A&quot;,&quot;0.33 A&quot;,&quot;3 A&quot;],&quot;correct&quot;:&quot;D&quot;,&quot;level&quot;:10,&quot;difficulty&quot;:&quot;Medium&quot;,&quot;prize&quot;:32000},
+  {&quot;text&quot;:&quot;What is the time complexity of binary search on a sorted array?&quot;,&quot;choices&quot;:[&quot;O(log n)&quot;,&quot;O(n)&quot;,&quot;O(n²)&quot;,&quot;O(1)&quot;],&quot;correct&quot;:&quot;A&quot;,&quot;level&quot;:11,&quot;difficulty&quot;:&quot;Hard&quot;,&quot;prize&quot;:64000},
+  {&quot;text&quot;:&quot;Which scientist proposed the uncertainty principle?&quot;,&quot;choices&quot;:[&quot;Isaac Newton&quot;,&quot;Niels Bohr&quot;,&quot;Werner Heisenberg&quot;,&quot;James Clerk Maxwell&quot;],&quot;correct&quot;:&quot;C&quot;,&quot;level&quot;:12,&quot;difficulty&quot;:&quot;Hard&quot;,&quot;prize&quot;:125000},
+  {&quot;text&quot;:&quot;How many edges does a cube have?&quot;,&quot;choices&quot;:[&quot;8&quot;,&quot;12&quot;,&quot;6&quot;,&quot;16&quot;],&quot;correct&quot;:&quot;B&quot;,&quot;level&quot;:13,&quot;difficulty&quot;:&quot;Hard&quot;,&quot;prize&quot;:250000},
+  {&quot;text&quot;:&quot;Which protocol provides reliable, ordered byte-stream delivery?&quot;,&quot;choices&quot;:[&quot;UDP&quot;,&quot;IP&quot;,&quot;ICMP&quot;,&quot;TCP&quot;],&quot;correct&quot;:&quot;D&quot;,&quot;level&quot;:14,&quot;difficulty&quot;:&quot;Hard&quot;,&quot;prize&quot;:500000},
+  {&quot;text&quot;:&quot;What is Euler&#x27;s totient function φ(15)?&quot;,&quot;choices&quot;:[&quot;8&quot;,&quot;10&quot;,&quot;12&quot;,&quot;14&quot;],&quot;correct&quot;:&quot;A&quot;,&quot;level&quot;:15,&quot;difficulty&quot;:&quot;Hard&quot;,&quot;prize&quot;:1000000}
+]
+</code></pre></article><article id="file-2"><h2>3. generate-sounds.js</h2><p><strong>File name:</strong> generate-sounds.js<br><strong>Create it in:</strong> Project root<br><strong>Full relative path:</strong> <code>millionaire/generate-sounds.js</code><br><strong>Purpose:</strong> Recreates every original WAV audio file using only Node built-ins.</p><pre><code>// Original synthesized WAV cues: no downloads or third-party recordings needed.
+const fs = require(&#x27;node:fs&#x27;);
+const path = require(&#x27;node:path&#x27;);
+const melodies = {
+  question: [330, 440, 660], lock: [220, 220], correct: [523, 659, 784, 1047],
+  wrong: [330, 277, 196], lifeline: [440, 660, 880, 660], next: [392, 523],
+  win: [523, 659, 784, 1047, 784, 1047], lose: [392, 330, 262, 196]
+};
+const folder = path.join(__dirname, &#x27;public&#x27;, &#x27;sounds&#x27;);
+fs.mkdirSync(folder, {recursive: true});
+for (const [name, notes] of Object.entries(melodies)) {
+  const rate = 22050, duration = 0.18, samples = Math.floor(rate * duration);
+  const size = samples * notes.length * 2, wav = Buffer.alloc(44 + size);
+  wav.write(&#x27;RIFF&#x27;, 0); wav.writeUInt32LE(36 + size, 4); wav.write(&#x27;WAVEfmt &#x27;, 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 2, 28);
+  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+  wav.write(&#x27;data&#x27;, 36); wav.writeUInt32LE(size, 40);
+  notes.forEach((frequency, n) =&gt; {
+    for (let i = 0; i &lt; samples; i++) {
+      const t = i / rate;
+      const envelope = Math.min(t / 0.015, 1) * Math.max(0, 1 - t / duration);
+      const wave = Math.sin(2 * Math.PI * frequency * t);
+      wav.writeInt16LE(Math.round(9000 * envelope * wave), 44 + (n * samples + i) * 2);
+    }
+  });
+  fs.writeFileSync(path.join(folder, name + &#x27;.wav&#x27;), wav);
+}
+console.log(&#x27;Created eight original sound cues in public/sounds.&#x27;);
+</code></pre></article><article id="file-3"><h2>4. server.js</h2><p><strong>File name:</strong> server.js<br><strong>Create it in:</strong> Project root<br><strong>Full relative path:</strong> <code>millionaire/server.js</code><br><strong>Purpose:</strong> Hosts the pages, manages authoritative game state, authenticates the host, creates QR images, and accepts votes.</p><pre><code>const express = require(&#x27;express&#x27;);
+const {createServer} = require(&#x27;node:http&#x27;);
+const {Server} = require(&#x27;socket.io&#x27;);
+const QRCode = require(&#x27;qrcode&#x27;);
+const {randomBytes, randomUUID, createHmac, timingSafeEqual} = require(&#x27;node:crypto&#x27;);
+const {networkInterfaces} = require(&#x27;node:os&#x27;);
+const path = require(&#x27;node:path&#x27;);
+const LETTERS = [&#x27;A&#x27;, &#x27;B&#x27;, &#x27;C&#x27;, &#x27;D&#x27;];
+const SOUNDS = [&#x27;question&#x27;, &#x27;lock&#x27;, &#x27;correct&#x27;, &#x27;wrong&#x27;, &#x27;lifeline&#x27;, &#x27;next&#x27;, &#x27;win&#x27;, &#x27;lose&#x27;];
+
+function validateQuestions(questions) {
+  if (!Array.isArray(questions) || !questions.length) throw Error(&#x27;Add at least one question.&#x27;);
+  questions.forEach((q, i) =&gt; {
+    if (!q || typeof q.text !== &#x27;string&#x27; || !q.text.trim() ||
+        !Array.isArray(q.choices) || q.choices.length !== 4 ||
+        q.choices.some(c =&gt; typeof c !== &#x27;string&#x27; || !c.trim()) ||
+        !LETTERS.includes(q.correct) || q.level !== i + 1 ||
+        typeof q.difficulty !== &#x27;string&#x27; || !Number.isFinite(q.prize) || q.prize &lt;= 0 ||
+        (i &gt; 0 &amp;&amp; q.prize &lt;= questions[i - 1].prize)) {
+      throw Error(`Invalid question ${i + 1}: check text, four choices, correct A-D, sequential level, difficulty and increasing prize.`);
+    }
+  });
+}
+function percentages(counts) {
+  const total = counts.reduce((a, b) =&gt; a + b, 0);
+  if (!total) return [0, 0, 0, 0];
+  const raw = counts.map(n =&gt; n * 100 / total), rounded = raw.map(Math.floor);
+  const order = raw.map((n, i) =&gt; ({i, remainder: n - rounded[i]}))
+    .sort((a, b) =&gt; b.remainder - a.remainder);
+  const remaining = 100 - rounded.reduce((a, b) =&gt; a + b, 0);
+  for (let k = 0; k &lt; remaining; k++) rounded[order[k].i]++;
+  return rounded;
+}
+function createGameServer(options = {}) {
+  const questions = options.questions || require(&#x27;./questions.json&#x27;);
+  validateQuestions(questions);
+  const pin = options.pin || process.env.HOST_PIN || randomBytes(8).toString(&#x27;hex&#x27;);
+  const secret = randomBytes(32);
+  const app = express(), http = createServer(app);
+  const io = new Server(http, {maxHttpBufferSize: 10000});
+  const host = io.of(&#x27;/host&#x27;);
+  let baseUrl = options.baseUrl || process.env.PUBLIC_URL || &#x27;http://localhost:3000&#x27;;
+  let revision = 0, game;
+  const attempts = new Map();
+  const q = () =&gt; questions[game.index];
+  function reset() {
+    game = {index: 0, phase: &#x27;ready&#x27;, selected: null, eliminated: [],
+      used: {fifty: false, audience: false, friend: false}, friend: &#x27;&#x27;, earned: 0,
+      showResults: true, poll: {id: randomUUID(), open: false, active: false, votes: new Map()}};
+  }
+  reset();
+  function publicState() {
+    const counts = LETTERS.map(letter =&gt; [...game.poll.votes.values()].filter(v =&gt; v === letter).length);
+    const revealed = [&#x27;revealed&#x27;, &#x27;lost&#x27;, &#x27;won&#x27;].includes(game.phase);
+    return {revision, index: game.index, phase: game.phase,
+      question: {text: q().text, choices: q().choices, difficulty: q().difficulty, level: q().level, prize: q().prize},
+      correct: revealed ? q().correct : null, selected: game.selected,
+      eliminated: game.eliminated, used: game.used, friend: game.friend, earned: game.earned,
+      ladder: questions.map(x =&gt; ({level: x.level, prize: x.prize})),
+      showResults: game.showResults, voteUrl: baseUrl + &#x27;/vote.html&#x27;,
+      poll: {id: game.poll.id, active: game.poll.active, open: game.poll.open,
+        total: counts.reduce((a, b) =&gt; a + b, 0), counts, percentages: percentages(counts)}};
+  }
+  // Only the host receives private results when projector results are hidden.
+  function audienceState() {
+    const s = publicState();
+    if (!s.showResults) {s.poll.counts = null; s.poll.percentages = null;}
+    return s;
+  }
+  function broadcast() {io.emit(&#x27;state&#x27;, audienceState()); host.emit(&#x27;state&#x27;, publicState());}
+  function changed() {revision++; broadcast();}
+  function sound(...names) {io.emit(&#x27;sound&#x27;, names); host.emit(&#x27;sound&#x27;, names);}
+  function sign(id) {return createHmac(&#x27;sha256&#x27;, secret).update(id).digest(&#x27;hex&#x27;);}
+  function identity(cookie = &#x27;&#x27;) {
+    const token = cookie.split(&#x27;;&#x27;).map(x =&gt; x.trim()).find(x =&gt; x.startsWith(&#x27;quiz_voter=&#x27;))?.slice(11);
+    if (!token) return null;
+    const [id, signature] = token.split(&#x27;.&#x27;);
+    if (!/^[a-f0-9]{32}$/.test(id || &#x27;&#x27;) || !/^[a-f0-9]{64}$/.test(signature || &#x27;&#x27;)) return null;
+    return timingSafeEqual(Buffer.from(signature), Buffer.from(sign(id))) ? id : null;
+  }
+  app.use((req, res, next) =&gt; {res.set(&#x27;Cache-Control&#x27;, &#x27;no-store&#x27;); next();});
+  app.get(&#x27;/api/identity&#x27;, (req, res) =&gt; {
+    let id = identity(req.headers.cookie);
+    if (!id) {
+      id = randomBytes(16).toString(&#x27;hex&#x27;);
+      res.cookie(&#x27;quiz_voter&#x27;, id + &#x27;.&#x27; + sign(id), {httpOnly: true, sameSite: &#x27;strict&#x27;, maxAge: 86400000, path: &#x27;/&#x27;});
+    }
+    res.json({ok: true});
+  });
+  app.get(&#x27;/api/qr&#x27;, async (req, res) =&gt; {
+    try {res.type(&#x27;png&#x27;).send(await QRCode.toBuffer(baseUrl + &#x27;/vote.html&#x27;, {width: 360, margin: 3}));}
+    catch {res.status(500).send(&#x27;QR generation failed. Use the displayed voting URL.&#x27;);}
+  });
+  app.use(express.static(path.join(__dirname, &#x27;public&#x27;)));
+  io.on(&#x27;connection&#x27;, socket =&gt; {
+    const voter = identity(socket.handshake.headers.cookie);
+    socket.emit(&#x27;state&#x27;, audienceState());
+    const status = () =&gt; socket.emit(&#x27;vote-status&#x27;, {pollId: game.poll.id, choice: game.poll.votes.get(voter) || null});
+    status();
+    socket.on(&#x27;vote-status&#x27;, status);
+    socket.on(&#x27;vote&#x27;, (data, ack = () =&gt; {}) =&gt; {
+      if (typeof ack !== &#x27;function&#x27;) return;
+      if (!voter) return ack({ok: false, error: &#x27;Cookies are required. Reload this page.&#x27;});
+      if (!data || data.pollId !== game.poll.id) return ack({ok: false, error: &#x27;This voting round has changed. Please try again.&#x27;});
+      if (game.poll.votes.has(voter)) return ack({ok: false, error: &#x27;You have already voted.&#x27;, choice: game.poll.votes.get(voter)});
+      if (!game.poll.open || game.phase !== &#x27;question&#x27;) return ack({ok: false, error: &#x27;Voting is closed.&#x27;});
+      if (!LETTERS.includes(data.choice) || game.eliminated.includes(data.choice)) return ack({ok: false, error: &#x27;Choose an available answer.&#x27;});
+      game.poll.votes.set(voter, data.choice);
+      // Votes do not change the host-command revision: voting cannot invalidate a host click.
+      broadcast(); status(); ack({ok: true, choice: data.choice});
+    });
+  });
+  host.use((socket, next) =&gt; {
+    const ip = socket.handshake.address, now = Date.now();
+    let entry = attempts.get(ip);
+    if (!entry || now - entry.start &gt; 60000) entry = {start: now, count: 0};
+    attempts.set(ip, entry);
+    if (++entry.count &gt; 20) return next(Error(&#x27;Too many login attempts. Wait one minute.&#x27;));
+    const supplied = String(socket.handshake.auth?.pin || &#x27;&#x27;);
+    if (Buffer.byteLength(supplied) !== Buffer.byteLength(pin) || !timingSafeEqual(Buffer.from(supplied), Buffer.from(pin))) return next(Error(&#x27;Incorrect host code.&#x27;));
+    next();
+  });
+  host.on(&#x27;connection&#x27;, socket =&gt; {
+    socket.emit(&#x27;state&#x27;, publicState());
+    socket.on(&#x27;command&#x27;, (data, ack = () =&gt; {}) =&gt; {
+      if (typeof ack !== &#x27;function&#x27;) return;
+      try {
+        if (!data || data.revision !== revision) throw Error(&#x27;The game changed. Check the screen and try again.&#x27;);
+        const {action, value} = data;
+        const requireQuestion = () =&gt; {if (game.phase !== &#x27;question&#x27;) throw Error(&#x27;Start a question before using this control.&#x27;);};
+        const use = name =&gt; {requireQuestion(); if (game.used[name]) throw Error(&#x27;This lifeline has already been used.&#x27;); game.used[name] = true;};
+        if (action === &#x27;restart&#x27;) {reset(); sound(&#x27;question&#x27;);}
+        else if (action === &#x27;start&#x27;) {
+          if (game.phase !== &#x27;ready&#x27;) throw Error(&#x27;The game has already started.&#x27;);
+          game.phase = &#x27;question&#x27;; sound(&#x27;question&#x27;);
+        } else if (action === &#x27;lock&#x27;) {
+          requireQuestion();
+          if (!LETTERS.includes(value) || game.eliminated.includes(value)) throw Error(&#x27;Choose an available answer.&#x27;);
+          game.selected = value; game.phase = &#x27;locked&#x27;; game.poll.open = false; sound(&#x27;lock&#x27;);
+        } else if (action === &#x27;reveal&#x27;) {
+          if (game.phase !== &#x27;locked&#x27;) throw Error(&#x27;Lock an answer first.&#x27;);
+          if (game.selected === q().correct) {
+            game.earned = q().prize;
+            game.phase = game.index === questions.length - 1 ? &#x27;won&#x27; : &#x27;revealed&#x27;;
+            sound(...(game.phase === &#x27;won&#x27; ? [&#x27;correct&#x27;, &#x27;win&#x27;] : [&#x27;correct&#x27;]));
+          } else {
+            const checkpoint = Math.floor(game.index / 5) * 5 - 1;
+            game.earned = checkpoint &gt;= 0 ? questions[checkpoint].prize : 0;
+            game.phase = &#x27;lost&#x27;; sound(&#x27;wrong&#x27;, &#x27;lose&#x27;);
+          }
+        } else if (action === &#x27;next&#x27;) {
+          if (game.phase !== &#x27;revealed&#x27;) throw Error(&#x27;Reveal a correct answer before moving on.&#x27;);
+          game.index++; game.phase = &#x27;question&#x27;; game.selected = null; game.eliminated = []; game.friend = &#x27;&#x27;;
+          game.poll = {id: randomUUID(), active: false, open: false, votes: new Map()}; sound(&#x27;next&#x27;, &#x27;question&#x27;);
+        } else if (action === &#x27;fifty&#x27;) {
+          if (game.poll.open) throw Error(&#x27;Stop audience voting before using 50:50.&#x27;);
+          use(&#x27;fifty&#x27;);
+          const wrong = LETTERS.filter(x =&gt; x !== q().correct);
+          for (let i = wrong.length - 1; i &gt; 0; i--) {const j = Math.floor(Math.random() * (i + 1)); [wrong[i], wrong[j]] = [wrong[j], wrong[i]];}
+          game.eliminated = wrong.slice(0, 2); sound(&#x27;lifeline&#x27;);
+        } else if (action === &#x27;friend&#x27;) {
+          use(&#x27;friend&#x27;);
+          const wrong = LETTERS.filter(x =&gt; x !== q().correct &amp;&amp; !game.eliminated.includes(x));
+          const answer = Math.random() &lt; 0.8 ? q().correct : wrong[Math.floor(Math.random() * wrong.length)];
+          game.friend = `“I think it is ${answer}: ${q().choices[LETTERS.indexOf(answer)]}. But I’m not completely sure!”`;
+          sound(&#x27;lifeline&#x27;);
+        } else if (action === &#x27;audience&#x27;) {
+          use(&#x27;audience&#x27;); game.poll.active = true; game.poll.open = true; sound(&#x27;lifeline&#x27;);
+        } else if (action === &#x27;voting&#x27;) {
+          requireQuestion(); if (!game.poll.active) throw Error(&#x27;Use Ask the Audience first.&#x27;);
+          game.poll.open = Boolean(value);
+        } else if (action === &#x27;resetVotes&#x27;) {
+          requireQuestion(); if (!game.poll.active) throw Error(&#x27;Use Ask the Audience first.&#x27;);
+          game.poll.id = randomUUID(); game.poll.votes.clear(); game.poll.open = false;
+        } else if (action === &#x27;results&#x27;) {game.showResults = Boolean(value);}
+        else if (action === &#x27;url&#x27;) {
+          const url = new URL(value);
+          if (![&#x27;http:&#x27;, &#x27;https:&#x27;].includes(url.protocol) || url.username || url.password || url.pathname !== &#x27;/&#x27; || url.search || url.hash) throw Error(&#x27;Enter only an origin, for example http://192.168.1.25:3000&#x27;);
+          baseUrl = url.origin;
+        } else if (action === &#x27;sound&#x27;) {
+          if (!SOUNDS.includes(value)) throw Error(&#x27;Unknown sound.&#x27;); sound(value);
+        } else throw Error(&#x27;Unknown command.&#x27;);
+        changed(); ack({ok: true});
+      } catch (error) {ack({ok: false, error: error.message});}
+    });
+  });
+  return {http, io, pin, publicState};
+}
+if (require.main === module) {
+  const port = Number(process.env.PORT || 3000);
+  const gameServer = createGameServer();
+  gameServer.http.on(&#x27;error&#x27;, error =&gt; {console.error(error.message); process.exitCode = 1;});
+  gameServer.http.listen(port, &#x27;0.0.0.0&#x27;, () =&gt; {
+    console.log(`\nHost: http://localhost:${port}/host.html\nScreen: http://localhost:${port}\nHost code: ${gameServer.pin}\n`);
+    console.log(&#x27;Choose your Wi-Fi IPv4 address below and set it in Host &gt; Audience address:&#x27;);
+    try {
+      for (const entries of Object.values(networkInterfaces())) for (const address of entries || []) {
+        if (address.family === &#x27;IPv4&#x27; &amp;&amp; !address.internal) console.log(`http://${address.address}:${port}`);
+      }
+    } catch {console.log(&#x27;Automatic IP detection unavailable. On Windows, run ipconfig.&#x27;);}
+    console.log(&#x27;Keep this terminal open. Ctrl+C stops the game.&#x27;);
+  });
+}
+module.exports = {createGameServer, validateQuestions, percentages};
+</code></pre></article><article id="file-4"><h2>5. public/index.html</h2><p><strong>File name:</strong> index.html<br><strong>Create it in:</strong> public folder<br><strong>Full relative path:</strong> <code>millionaire/public/index.html</code><br><strong>Purpose:</strong> The large-screen projector view.</p><pre><code>&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot;&gt;&lt;title&gt;Millionaire · Live&lt;/title&gt;&lt;link rel=&quot;stylesheet&quot; href=&quot;/style.css&quot;&gt;&lt;/head&gt;&lt;body class=&quot;projector&quot; data-role=&quot;projector&quot;&gt;&lt;div id=&quot;app&quot; class=&quot;shell&quot; &gt;&lt;header&gt;&lt;div class=&quot;brand&quot;&gt;&lt;span class=&quot;mark&quot;&gt;M&lt;/span&gt;&lt;div&gt;&lt;p class=&quot;eyebrow&quot;&gt;The live quiz show&lt;/p&gt;&lt;h1&gt;Millionaire&lt;span style=&quot;color:var(--gold)&quot;&gt;.&lt;/span&gt;&lt;/h1&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;top-actions&quot;&gt;&lt;span id=&quot;connection&quot; class=&quot;connection offline&quot;&gt;Connecting…&lt;/span&gt;&lt;button id=&quot;sound-toggle&quot;&gt;Enable sound&lt;/button&gt;&lt;button id=&quot;fullscreen&quot;&gt;Full screen&lt;/button&gt;&lt;/div&gt;&lt;/header&gt;
+&lt;p id=&quot;message&quot; class=&quot;notice&quot; role=&quot;status&quot;&gt;&lt;/p&gt;
+&lt;div class=&quot;layout&quot;&gt;&lt;main class=&quot;stage&quot;&gt;&lt;div class=&quot;status-line&quot;&gt;&lt;span id=&quot;level&quot;&gt;Waiting for host&lt;/span&gt;&lt;span class=&quot;prize&quot; id=&quot;prize&quot;&gt;&lt;/span&gt;&lt;/div&gt;
+&lt;div class=&quot;question-card&quot;&gt;&lt;p id=&quot;phase&quot; class=&quot;eyebrow&quot;&gt;&lt;/p&gt;&lt;h2 id=&quot;question&quot;&gt;The next million starts with one answer.&lt;/h2&gt;&lt;/div&gt;&lt;div id=&quot;answers&quot; class=&quot;answers&quot;&gt;&lt;/div&gt;
+&lt;div class=&quot;lifelines&quot;&gt;&lt;button class=&quot;lifeline&quot; id=&quot;fifty&quot;&gt;50:50&lt;/button&gt;&lt;button class=&quot;lifeline&quot; id=&quot;audience&quot;&gt;Ask the Audience&lt;/button&gt;&lt;button class=&quot;lifeline&quot; id=&quot;friend&quot;&gt;Phone a Friend&lt;/button&gt;&lt;/div&gt;
+&lt;div id=&quot;outcome&quot; class=&quot;banner&quot; role=&quot;status&quot; hidden&gt;&lt;/div&gt;
+&lt;section id=&quot;friend-panel&quot; class=&quot;panel&quot; hidden&gt;&lt;p class=&quot;eyebrow&quot;&gt;Phone a Friend · simulation&lt;/p&gt;&lt;p id=&quot;friend-text&quot;&gt;&lt;/p&gt;&lt;/section&gt;
+&lt;section id=&quot;audience-panel&quot; class=&quot;panel&quot; hidden&gt;&lt;div class=&quot;audience-layout&quot;&gt;&lt;div&gt;&lt;img id=&quot;qr&quot; class=&quot;qr&quot; alt=&quot;Scan to open audience voting&quot; width=&quot;210&quot; height=&quot;210&quot;&gt;&lt;a id=&quot;vote-link&quot; class=&quot;vote-link&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;&lt;/a&gt;&lt;/div&gt;&lt;div&gt;&lt;p class=&quot;eyebrow&quot;&gt;The audience has a voice&lt;/p&gt;&lt;h2&gt;What do you think?&lt;/h2&gt;&lt;p id=&quot;vote-count&quot; class=&quot;muted&quot;&gt;&lt;/p&gt;&lt;div id=&quot;bars&quot;&gt;&lt;/div&gt;&lt;p id=&quot;private-results&quot; class=&quot;muted&quot; hidden&gt;Results are on the host screen.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;&lt;/section&gt;
+
+&lt;/main&gt;&lt;aside class=&quot;panel ladder-panel&quot;&gt;&lt;h2 class=&quot;ladder-title&quot;&gt;The prize ladder&lt;/h2&gt;&lt;ol id=&quot;ladder&quot; class=&quot;ladder&quot;&gt;&lt;/ol&gt;&lt;p class=&quot;footer&quot;&gt;Safety milestones every 5 questions.&lt;/p&gt;&lt;/aside&gt;&lt;/div&gt;&lt;p class=&quot;footer&quot;&gt;Original quiz-show design · Projector screen · controlled by your host&lt;/p&gt;&lt;/div&gt;&lt;script src=&quot;/socket.io/socket.io.js&quot;&gt;&lt;/script&gt;&lt;script src=&quot;/shared.js&quot;&gt;&lt;/script&gt;&lt;script src=&quot;/game.js&quot;&gt;&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;
+</code></pre></article><article id="file-5"><h2>6. public/host.html</h2><p><strong>File name:</strong> host.html<br><strong>Create it in:</strong> public folder<br><strong>Full relative path:</strong> <code>millionaire/public/host.html</code><br><strong>Purpose:</strong> Host login, answer selection, lifelines, voting controls, sound controls.</p><pre><code>&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot;&gt;&lt;title&gt;Millionaire · Host&lt;/title&gt;&lt;link rel=&quot;stylesheet&quot; href=&quot;/style.css&quot;&gt;&lt;/head&gt;&lt;body class=&quot;host&quot; data-role=&quot;host&quot;&gt;&lt;section id=&quot;login&quot; class=&quot;panel login&quot;&gt;&lt;p class=&quot;eyebrow&quot;&gt;Host access&lt;/p&gt;&lt;h1&gt;Welcome to the desk.&lt;/h1&gt;&lt;p&gt;Enter the host code printed in your server terminal.&lt;/p&gt;&lt;form id=&quot;login-form&quot;&gt;&lt;label class=&quot;field&quot; for=&quot;pin&quot;&gt;Host code&lt;/label&gt;&lt;input id=&quot;pin&quot; type=&quot;password&quot; required autocomplete=&quot;current-password&quot;&gt;&lt;button class=&quot;primary&quot;&gt;Connect as host&lt;/button&gt;&lt;/form&gt;&lt;p id=&quot;login-error&quot; class=&quot;notice&quot; role=&quot;alert&quot;&gt;&lt;/p&gt;&lt;/section&gt;&lt;div id=&quot;app&quot; class=&quot;shell&quot; hidden&gt;&lt;header&gt;&lt;div class=&quot;brand&quot;&gt;&lt;span class=&quot;mark&quot;&gt;M&lt;/span&gt;&lt;div&gt;&lt;p class=&quot;eyebrow&quot;&gt;The live quiz show&lt;/p&gt;&lt;h1&gt;Millionaire&lt;span style=&quot;color:var(--gold)&quot;&gt;.&lt;/span&gt;&lt;/h1&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;top-actions&quot;&gt;&lt;span id=&quot;connection&quot; class=&quot;connection offline&quot;&gt;Connecting…&lt;/span&gt;&lt;button id=&quot;sound-toggle&quot;&gt;Enable sound&lt;/button&gt;&lt;button id=&quot;fullscreen&quot;&gt;Full screen&lt;/button&gt;&lt;/div&gt;&lt;/header&gt;
+&lt;p id=&quot;message&quot; class=&quot;notice&quot; role=&quot;status&quot;&gt;&lt;/p&gt;
+&lt;div class=&quot;layout&quot;&gt;&lt;main class=&quot;stage&quot;&gt;&lt;div class=&quot;status-line&quot;&gt;&lt;span id=&quot;level&quot;&gt;Waiting for host&lt;/span&gt;&lt;span class=&quot;prize&quot; id=&quot;prize&quot;&gt;&lt;/span&gt;&lt;/div&gt;
+&lt;div class=&quot;question-card&quot;&gt;&lt;p id=&quot;phase&quot; class=&quot;eyebrow&quot;&gt;&lt;/p&gt;&lt;h2 id=&quot;question&quot;&gt;The next million starts with one answer.&lt;/h2&gt;&lt;/div&gt;&lt;div id=&quot;answers&quot; class=&quot;answers&quot;&gt;&lt;/div&gt;
+&lt;div class=&quot;lifelines&quot;&gt;&lt;button class=&quot;lifeline&quot; id=&quot;fifty&quot;&gt;50:50&lt;/button&gt;&lt;button class=&quot;lifeline&quot; id=&quot;audience&quot;&gt;Ask the Audience&lt;/button&gt;&lt;button class=&quot;lifeline&quot; id=&quot;friend&quot;&gt;Phone a Friend&lt;/button&gt;&lt;/div&gt;
+&lt;div id=&quot;outcome&quot; class=&quot;banner&quot; role=&quot;status&quot; hidden&gt;&lt;/div&gt;
+&lt;section id=&quot;friend-panel&quot; class=&quot;panel&quot; hidden&gt;&lt;p class=&quot;eyebrow&quot;&gt;Phone a Friend · simulation&lt;/p&gt;&lt;p id=&quot;friend-text&quot;&gt;&lt;/p&gt;&lt;/section&gt;
+&lt;section id=&quot;audience-panel&quot; class=&quot;panel&quot; hidden&gt;&lt;div class=&quot;audience-layout&quot;&gt;&lt;div&gt;&lt;img id=&quot;qr&quot; class=&quot;qr&quot; alt=&quot;Scan to open audience voting&quot; width=&quot;210&quot; height=&quot;210&quot;&gt;&lt;a id=&quot;vote-link&quot; class=&quot;vote-link&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;&lt;/a&gt;&lt;/div&gt;&lt;div&gt;&lt;p class=&quot;eyebrow&quot;&gt;The audience has a voice&lt;/p&gt;&lt;h2&gt;What do you think?&lt;/h2&gt;&lt;p id=&quot;vote-count&quot; class=&quot;muted&quot;&gt;&lt;/p&gt;&lt;div id=&quot;bars&quot;&gt;&lt;/div&gt;&lt;p id=&quot;private-results&quot; class=&quot;muted&quot; hidden&gt;Results are on the host screen.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;&lt;/section&gt;
+&lt;section class=&quot;panel host-controls&quot;&gt;&lt;p class=&quot;eyebrow&quot;&gt;Host desk&lt;/p&gt;&lt;h2&gt;Run the show&lt;/h2&gt;&lt;p class=&quot;muted&quot;&gt;Click an answer above to lock it. Reveal when you’re ready.&lt;/p&gt;&lt;div class=&quot;controls&quot;&gt;&lt;button id=&quot;start&quot; class=&quot;primary&quot;&gt;Start game&lt;/button&gt;&lt;button id=&quot;reveal&quot; class=&quot;primary&quot;&gt;Reveal answer&lt;/button&gt;&lt;button id=&quot;next&quot;&gt;Next question&lt;/button&gt;&lt;button id=&quot;restart&quot; class=&quot;danger&quot;&gt;Restart game&lt;/button&gt;&lt;/div&gt;&lt;h2&gt;Audience controls&lt;/h2&gt;&lt;div class=&quot;controls&quot;&gt;&lt;button id=&quot;open-votes&quot;&gt;Start voting&lt;/button&gt;&lt;button id=&quot;close-votes&quot;&gt;Stop voting&lt;/button&gt;&lt;button id=&quot;reset-votes&quot;&gt;Reset votes&lt;/button&gt;&lt;button id=&quot;results&quot;&gt;Hide projector results&lt;/button&gt;&lt;/div&gt;&lt;form id=&quot;url-form&quot;&gt;&lt;label class=&quot;field&quot; for=&quot;base-url&quot;&gt;Audience address — your laptop’s Wi-Fi URL, without /vote.html&lt;/label&gt;&lt;input id=&quot;base-url&quot; type=&quot;url&quot; required placeholder=&quot;http://192.168.1.25:3000&quot;&gt;&lt;button type=&quot;submit&quot; style=&quot;margin-top:10px&quot;&gt;Update QR address&lt;/button&gt;&lt;p id=&quot;url-warning&quot; class=&quot;notice&quot;&gt;&lt;/p&gt;&lt;/form&gt;&lt;h2&gt;Sound desk&lt;/h2&gt;&lt;div class=&quot;controls&quot;&gt;&lt;select id=&quot;cue&quot; aria-label=&quot;Sound cue&quot;&gt;&lt;option&gt;question&lt;/option&gt;&lt;option&gt;lock&lt;/option&gt;&lt;option&gt;correct&lt;/option&gt;&lt;option&gt;wrong&lt;/option&gt;&lt;option&gt;lifeline&lt;/option&gt;&lt;option&gt;next&lt;/option&gt;&lt;option&gt;win&lt;/option&gt;&lt;option&gt;lose&lt;/option&gt;&lt;/select&gt;&lt;button id=&quot;play-cue&quot;&gt;Play cue&lt;/button&gt;&lt;/div&gt;&lt;p class=&quot;muted&quot;&gt;Enable sound on the projector page only to avoid an echo. This button triggers the cue on enabled screens.&lt;/p&gt;&lt;a href=&quot;/&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Open projector screen ↗&lt;/a&gt;&lt;/section&gt;
+&lt;/main&gt;&lt;aside class=&quot;panel ladder-panel&quot;&gt;&lt;h2 class=&quot;ladder-title&quot;&gt;The prize ladder&lt;/h2&gt;&lt;ol id=&quot;ladder&quot; class=&quot;ladder&quot;&gt;&lt;/ol&gt;&lt;p class=&quot;footer&quot;&gt;Safety milestones every 5 questions.&lt;/p&gt;&lt;/aside&gt;&lt;/div&gt;&lt;p class=&quot;footer&quot;&gt;Original quiz-show design · Host control panel&lt;/p&gt;&lt;/div&gt;&lt;script src=&quot;/socket.io/socket.io.js&quot;&gt;&lt;/script&gt;&lt;script src=&quot;/shared.js&quot;&gt;&lt;/script&gt;&lt;script src=&quot;/game.js&quot;&gt;&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;
+</code></pre></article><article id="file-6"><h2>7. public/vote.html</h2><p><strong>File name:</strong> vote.html<br><strong>Create it in:</strong> public folder<br><strong>Full relative path:</strong> <code>millionaire/public/vote.html</code><br><strong>Purpose:</strong> Mobile audience voting page.</p><pre><code>&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot;&gt;&lt;title&gt;Millionaire · Audience vote&lt;/title&gt;&lt;link rel=&quot;stylesheet&quot; href=&quot;/style.css&quot;&gt;&lt;/head&gt;&lt;body&gt;&lt;div class=&quot;vote-shell&quot;&gt;&lt;header&gt;&lt;div class=&quot;brand&quot;&gt;&lt;span class=&quot;mark&quot;&gt;M&lt;/span&gt;&lt;div&gt;&lt;p class=&quot;eyebrow&quot;&gt;Ask the Audience&lt;/p&gt;&lt;h1&gt;Your vote counts.&lt;/h1&gt;&lt;/div&gt;&lt;/div&gt;&lt;/header&gt;&lt;span id=&quot;connection&quot; class=&quot;connection offline&quot;&gt;Connecting…&lt;/span&gt;&lt;div class=&quot;question-card&quot;&gt;&lt;p class=&quot;eyebrow&quot; id=&quot;vote-phase&quot;&gt;Audience vote&lt;/p&gt;&lt;h2 id=&quot;vote-question&quot;&gt;Waiting for the host…&lt;/h2&gt;&lt;/div&gt;&lt;p class=&quot;muted&quot;&gt;Tap one answer to submit your vote. You cannot change it afterwards.&lt;/p&gt;&lt;div class=&quot;answers&quot; id=&quot;vote-answers&quot;&gt;&lt;/div&gt;&lt;p id=&quot;message&quot; class=&quot;banner&quot; role=&quot;status&quot;&gt;Connecting to the game…&lt;/p&gt;&lt;section class=&quot;panel&quot;&gt;&lt;h2&gt;Live results&lt;/h2&gt;&lt;p id=&quot;vote-count&quot; class=&quot;muted&quot;&gt;&lt;/p&gt;&lt;div id=&quot;bars&quot;&gt;&lt;/div&gt;&lt;p id=&quot;private-results&quot; class=&quot;muted&quot; hidden&gt;Results are on the host screen.&lt;/p&gt;&lt;/section&gt;&lt;p class=&quot;footer&quot;&gt;One vote per browser per voting round. Keep this page open. No account required.&lt;/p&gt;&lt;/div&gt;&lt;script src=&quot;/socket.io/socket.io.js&quot;&gt;&lt;/script&gt;&lt;script src=&quot;/shared.js&quot;&gt;&lt;/script&gt;&lt;script src=&quot;/vote.js&quot;&gt;&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;
+</code></pre></article><article id="file-7"><h2>8. public/style.css</h2><p><strong>File name:</strong> style.css<br><strong>Create it in:</strong> public folder<br><strong>Full relative path:</strong> <code>millionaire/public/style.css</code><br><strong>Purpose:</strong> Shared responsive layout, colors, answer states, animation, and mobile styles.</p><pre><code>:root{color-scheme:dark;--bg:#080b21;--panel:#111732;--border:#303a65;--gold:#ffd17b;--muted:#a4aecb;--green:#54e2b3;--red:#ff7d94}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 40% 0,#24235b 0,transparent 55%),var(--bg);color:#f7f8ff;font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}button,input,select{font:inherit}button,a,input,select{ -webkit-tap-highlight-color:transparent}button{cursor:pointer;border:1px solid var(--border);background:#1b2447;color:inherit;border-radius:10px;padding:12px 18px;transition:background .16s,transform .16s}button:hover:not(:disabled){background:#323c65;transform:translateY(-1px)}button:disabled{cursor:default;opacity:.4}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--gold);outline-offset:4px}a{color:var(--gold)}input,select{padding:11px;border:1px solid var(--border);border-radius:8px;background:#090f28;color:white;max-width:100%}input{width:100%}h1,h2,p{margin-top:0}h1{font-size:clamp(24px,3vw,40px);letter-spacing:-1px}h2{font-size:20px}small,.muted{color:var(--muted)}[hidden]{display:none!important}.shell{max-width:1500px;margin:auto;padding:28px 36px}header{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid var(--border);padding-bottom:22px;margin-bottom:26px}.brand{display:flex;align-items:center;gap:14px}.mark{display:grid;place-items:center;width:48px;height:48px;border:1px solid var(--gold);border-radius:50%;font-weight:800;font-size:22px;color:var(--gold)}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin:0 0 3px}.brand h1{margin:0}.top-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px}.connection{font-size:12px;color:var(--green)}.connection.offline{color:var(--red)}.layout{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:28px}.stage{min-width:0}.status-line{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:14px}.prize{color:var(--gold);font-weight:700}.question-card{min-height:230px;display:flex;flex-direction:column;justify-content:center;text-align:center;padding:36px 24px;margin:20px 0 24px;border:1px solid #61519b;border-radius:22px;background:linear-gradient(135deg,#242452,#111631);box-shadow:0 15px 60px #0003}.question-card h2{font-size:clamp(24px,2.7vw,39px);line-height:1.3;margin:14px 0}.answers{display:grid;grid-template-columns:1fr 1fr;gap:14px}.answer{display:flex;align-items:center;gap:18px;text-align:left;min-height:80px;font-size:clamp(18px,1.6vw,24px);border-radius:13px;background:#121a36}.letter{color:var(--gold);font-weight:800;flex-shrink:0}.answer.selected{background:#b87518;border-color:var(--gold);color:white;opacity:1}.answer.correct{background:#125c4d;border-color:var(--green);opacity:1;animation:glow .7s 2}.answer.wrong{background:#732940;border-color:var(--red);opacity:1;animation:shake .3s 2}.answer.eliminated{opacity:.22;text-decoration:line-through}.answer.static{cursor:default;opacity:1}.answer.static.eliminated{opacity:.22}.answer .answer-text{flex:1}.result-tag{font-size:12px;letter-spacing:1px;text-transform:uppercase}.lifelines{display:flex;flex-wrap:wrap;gap:12px;margin:26px 0}.lifeline{flex:1;min-width:140px;border-radius:40px}.lifeline.used{text-decoration:line-through;opacity:.4}.panel{background:#10162dd9;border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:20px}.ladder{margin:0;padding:0;list-style:none;display:flex;flex-direction:column-reverse;gap:3px}.ladder li{display:flex;justify-content:space-between;padding:5px 12px;border-radius:6px;font-variant-numeric:tabular-nums;color:var(--muted)}.ladder li.safe{color:var(--gold)}.ladder li.current{background:var(--gold);color:#261b09;font-weight:800}.ladder li.passed:not(.current){color:var(--green)}.ladder-title{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}.audience-layout{display:grid;grid-template-columns:210px 1fr;gap:25px}.qr{width:100%;height:auto;border-radius:8px;background:white}.vote-link{font-size:12px;overflow-wrap:anywhere;display:block}.bar-row{display:grid;grid-template-columns:20px 1fr 48px;align-items:center;gap:10px;margin:14px 0}.track{height:12px;border-radius:20px;background:#252e50;overflow:hidden}.fill{height:100%;width:0;background:linear-gradient(90deg,#8668f1,#d3bbff);transition:width .3s;border-radius:20px}.bar-number{text-align:right;font-variant-numeric:tabular-nums}.banner{padding:15px 20px;border:1px solid var(--border);border-radius:10px;color:var(--gold);margin-bottom:20px}.host-controls{margin-top:24px}.controls{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.primary{background:var(--gold);color:#231906;border-color:var(--gold);font-weight:700}.primary:hover:not(:disabled){background:#ffe1a9}.danger{color:var(--red);border-color:#82334b}.field{display:block;margin:12px 0 5px;color:var(--muted);font-size:14px}.login{max-width:460px;margin:9vh auto}.login button{margin-top:14px}.notice{color:var(--red);min-height:24px;margin-top:12px}.vote-shell{max-width:650px;margin:0 auto;padding:25px 20px}.vote-shell .answers{grid-template-columns:1fr}.vote-shell .question-card{min-height:160px;padding:22px 16px}.vote-shell header{margin-bottom:20px}.footer{font-size:12px;color:var(--muted);margin:24px 0}.sound-note{font-size:12px;max-width:200px}.host .question-card{min-height:160px}.host .question-card h2{font-size:26px}.host .answer{font-size:18px;min-height:65px}.host .shell{max-width:1300px}.full{width:100%}@keyframes glow{50%{box-shadow:0 0 30px #54e2b370}}@keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}@media(max-width:850px){.shell{padding:20px}.layout{grid-template-columns:1fr}.ladder-panel{order:2}.ladder{display:grid;grid-template-columns:repeat(3,1fr)}header{align-items:flex-start}.brand h1{font-size:25px}.audience-layout{grid-template-columns:160px 1fr}.question-card{min-height:180px}.ladder li{font-size:13px}}@media(max-width:520px){header{flex-direction:column}.answers{grid-template-columns:1fr}.audience-layout{grid-template-columns:1fr}.qr{max-width:210px}.ladder{grid-template-columns:repeat(2,1fr)}.question-card h2{font-size:24px}.lifeline{min-width:100px;padding:10px;font-size:13px}.panel{padding:16px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.notice:empty{display:none}.projector .lifeline:disabled:not(.used){opacity:.8}.projector.poll-active .question-card{min-height:130px;padding:22px;margin:14px 0 18px}.projector.poll-active .question-card h2{font-size:clamp(24px,2.5vw,36px)}.projector.poll-active .lifelines{margin:18px 0}.projector.poll-active .answer{min-height:68px}.projector.poll-active .audience-layout{grid-template-columns:180px 1fr}.projector.poll-active .panel{padding:18px}.projector.poll-active header{padding-bottom:14px;margin-bottom:18px}.projector.poll-active .shell{padding-top:20px;padding-bottom:12px}.projector.poll-active .footer{margin:14px 0}@media(min-width:851px) and (max-height:850px){.projector.poll-active .question-card{min-height:100px;padding:12px}.projector.poll-active .question-card h2{font-size:28px;margin:8px 0}.projector.poll-active .answer{min-height:56px;font-size:20px}.projector.poll-active .audience-layout{grid-template-columns:150px 1fr}.projector.poll-active .bar-row{margin:8px 0}.projector.poll-active .lifelines{margin:12px 0}.projector.poll-active .ladder li{padding:2px 10px}.projector.poll-active .footer{font-size:11px}}@media(max-width:520px){.projector.poll-active .audience-layout{grid-template-columns:1fr}}
+</code></pre></article><article id="file-8"><h2>9. public/shared.js</h2><p><strong>File name:</strong> shared.js<br><strong>Create it in:</strong> public folder<br><strong>Full relative path:</strong> <code>millionaire/public/shared.js</code><br><strong>Purpose:</strong> Shared DOM helpers, formatting, result bars, fullscreen and audio.</p><pre><code>const $ = id =&gt; document.getElementById(id);
+const letters = [&#x27;A&#x27;, &#x27;B&#x27;, &#x27;C&#x27;, &#x27;D&#x27;];
+const money = amount =&gt; &#x27;$&#x27; + amount.toLocaleString(&#x27;en-US&#x27;);
+function connection(connected) {
+  $(&#x27;connection&#x27;).textContent = connected ? &#x27;● Connected&#x27; : &#x27;● Disconnected — reconnecting&#x27;;
+  $(&#x27;connection&#x27;).classList.toggle(&#x27;offline&#x27;, !connected);
+}
+function renderBars(poll) {
+  $(&#x27;vote-count&#x27;).textContent = `${poll.total} vote${poll.total === 1 ? &#x27;&#x27; : &#x27;s&#x27;} · ${poll.open ? &#x27;Voting open&#x27; : &#x27;Voting closed&#x27;}`;
+  $(&#x27;bars&#x27;).replaceChildren();
+  if (!poll.percentages) return;
+  letters.forEach((letter, i) =&gt; {
+    const row = document.createElement(&#x27;div&#x27;); row.className = &#x27;bar-row&#x27;;
+    const label = document.createElement(&#x27;b&#x27;); label.textContent = letter;
+    const track = document.createElement(&#x27;div&#x27;); track.className = &#x27;track&#x27;;
+    const fill = document.createElement(&#x27;div&#x27;); fill.className = &#x27;fill&#x27;; fill.style.width = poll.percentages[i] + &#x27;%&#x27;;
+    const number = document.createElement(&#x27;span&#x27;); number.className = &#x27;bar-number&#x27;; number.textContent = poll.percentages[i] + &#x27;%&#x27;;
+    track.append(fill); row.append(label, track, number); $(&#x27;bars&#x27;).append(row);
+  });
+}
+// One Web Audio context plays local WAV files after the user clicks Enable sound.
+// Unlocking must happen separately on each browser page; enable only the speaker page.
+const soundPlayer = (() =&gt; {
+  let context, enabled = false, nextTime = 0;
+  const buffers = {};
+  const names = [&#x27;question&#x27;, &#x27;lock&#x27;, &#x27;correct&#x27;, &#x27;wrong&#x27;, &#x27;lifeline&#x27;, &#x27;next&#x27;, &#x27;win&#x27;, &#x27;lose&#x27;];
+  return {
+    async toggle() {
+      if (enabled) {enabled = false; await context.suspend(); $(&#x27;sound-toggle&#x27;).textContent = &#x27;Enable sound&#x27;; return;}
+      try {
+        context ||= new (window.AudioContext || window.webkitAudioContext)();
+        await context.resume();
+        await Promise.all(names.map(async name =&gt; {
+          if (buffers[name]) return;
+          const response = await fetch(`/sounds/${name}.wav`);
+          if (!response.ok) throw Error(`Missing ${name}.wav. Run npm run sounds.`);
+          buffers[name] = await context.decodeAudioData(await response.arrayBuffer());
+        }));
+        enabled = true; nextTime = context.currentTime; $(&#x27;sound-toggle&#x27;).textContent = &#x27;Mute sound&#x27;;
+        this.play([&#x27;question&#x27;]);
+      } catch (error) {$(&#x27;message&#x27;).textContent = `Audio: ${error.message}`;}
+    },
+    play(namesToPlay) {
+      if (!enabled || context.state !== &#x27;running&#x27;) return;
+      nextTime = Math.max(context.currentTime, nextTime);
+      namesToPlay.forEach(name =&gt; {
+        if (!buffers[name]) return;
+        const source = context.createBufferSource(); source.buffer = buffers[name];
+        const gain = context.createGain(); gain.gain.value = 0.65;
+        source.connect(gain).connect(context.destination); source.start(nextTime);
+        nextTime += source.buffer.duration + 0.1;
+      });
+    }
+  };
+})();
+if ($(&#x27;sound-toggle&#x27;)) $(&#x27;sound-toggle&#x27;).onclick = () =&gt; soundPlayer.toggle();
+if ($(&#x27;fullscreen&#x27;)) $(&#x27;fullscreen&#x27;).onclick = async () =&gt; {
+  try {if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); else await document.exitFullscreen();}
+  catch {$(&#x27;message&#x27;).textContent = &#x27;Use F11 for fullscreen on your laptop.&#x27;;}
+};
+</code></pre></article><article id="file-9"><h2>10. public/game.js</h2><p><strong>File name:</strong> game.js<br><strong>Create it in:</strong> public folder<br><strong>Full relative path:</strong> <code>millionaire/public/game.js</code><br><strong>Purpose:</strong> Host commands and state rendering for host/projector.</p><pre><code>const isHost = document.body.dataset.role === &#x27;host&#x27;;
+let socket, state, busy = false, lastQr = &#x27;&#x27;;
+async function command(action, value) {
+  if (!socket?.connected || !state || busy) return;
+  if ([&#x27;restart&#x27;, &#x27;resetVotes&#x27;].includes(action) &amp;&amp; !confirm(action === &#x27;restart&#x27; ? &#x27;Restart the whole game and restore all lifelines?&#x27; : &#x27;Clear all votes? Everyone can vote again after Start voting.&#x27;)) return;
+  busy = true; render(); $(&#x27;message&#x27;).textContent = &#x27;&#x27;;
+  socket.timeout(5000).emit(&#x27;command&#x27;, {action, value, revision: state.revision}, (error, result) =&gt; {
+    busy = false;
+    if (error) $(&#x27;message&#x27;).textContent = &#x27;Connection timeout. Check the current screen before trying again.&#x27;;
+    else if (!result.ok) $(&#x27;message&#x27;).textContent = result.error;
+    render();
+  });
+}
+function connect(pin) {
+  if (socket) socket.disconnect();
+  socket = isHost ? io(&#x27;/host&#x27;, {auth: {pin}}) : io();
+  socket.on(&#x27;connect&#x27;, () =&gt; {
+    connection(true);
+    if (isHost) {$(&#x27;login&#x27;).hidden = true; $(&#x27;app&#x27;).hidden = false;}
+    render();
+  });
+  socket.on(&#x27;disconnect&#x27;, () =&gt; {connection(false); render();});
+  socket.on(&#x27;connect_error&#x27;, error =&gt; {
+    connection(false);
+    if (isHost) {$(&#x27;login&#x27;).hidden = false; $(&#x27;login-error&#x27;).textContent = error.message;}
+    else $(&#x27;message&#x27;).textContent = &#x27;Cannot reach server. Keep the server terminal open.&#x27;;
+  });
+  socket.on(&#x27;state&#x27;, value =&gt; {state = value; render();});
+  socket.on(&#x27;sound&#x27;, names =&gt; soundPlayer.play(names));
+}
+function render() {
+  if (!state) return;
+  const s = state, active = isHost &amp;&amp; socket.connected &amp;&amp; !busy;
+  document.body.classList.toggle(&#x27;poll-active&#x27;, s.poll.active);
+  const phaseNames = {ready: &#x27;Ready to play&#x27;, question: &#x27;Choose your answer&#x27;, locked: &#x27;Final answer locked&#x27;, revealed: &#x27;Correct answer&#x27;, won: &#x27;You’re a millionaire!&#x27;, lost: &#x27;Game over&#x27;};
+  $(&#x27;phase&#x27;).textContent = phaseNames[s.phase];
+  $(&#x27;level&#x27;).textContent = `Question ${s.index + 1} / ${s.ladder.length} · ${s.question.difficulty}`;
+  $(&#x27;prize&#x27;).textContent = `Playing for ${money(s.question.prize)}`;
+  $(&#x27;question&#x27;).textContent = s.phase === &#x27;ready&#x27; ? &#x27;The next million starts with one answer.&#x27; : s.question.text;
+  $(&#x27;answers&#x27;).replaceChildren();
+  if (s.phase !== &#x27;ready&#x27;) letters.forEach((letter, i) =&gt; {
+    const button = document.createElement(&#x27;button&#x27;); button.className = &#x27;answer&#x27;;
+    const label = document.createElement(&#x27;span&#x27;); label.className = &#x27;letter&#x27;; label.textContent = letter + &#x27;:&#x27;;
+    const text = document.createElement(&#x27;span&#x27;); text.className = &#x27;answer-text&#x27;; text.textContent = s.question.choices[i];
+    const tag = document.createElement(&#x27;span&#x27;); tag.className = &#x27;result-tag&#x27;;
+    if (s.eliminated.includes(letter)) button.classList.add(&#x27;eliminated&#x27;);
+    if (s.selected === letter) {button.classList.add(&#x27;selected&#x27;); tag.textContent = &#x27;Locked&#x27;;}
+    if (s.correct === letter) {button.classList.add(&#x27;correct&#x27;); tag.textContent = &#x27;Correct&#x27;;}
+    else if (s.correct &amp;&amp; s.selected === letter) {button.classList.add(&#x27;wrong&#x27;); tag.textContent = &#x27;Wrong&#x27;;}
+    button.disabled = !active || s.phase !== &#x27;question&#x27; || s.eliminated.includes(letter);
+    if (!isHost) button.classList.add(&#x27;static&#x27;);
+    button.append(label, text, tag); button.onclick = () =&gt; command(&#x27;lock&#x27;, letter); $(&#x27;answers&#x27;).append(button);
+  });
+  [&#x27;fifty&#x27;, &#x27;audience&#x27;, &#x27;friend&#x27;].forEach(name =&gt; {
+    $(name).classList.toggle(&#x27;used&#x27;, s.used[name]);
+    $(name).disabled = !active || s.phase !== &#x27;question&#x27; || s.used[name] || (name === &#x27;fifty&#x27; &amp;&amp; s.poll.open);
+    $(name).title = s.used[name] ? &#x27;Already used&#x27; : name === &#x27;fifty&#x27; &amp;&amp; s.poll.open ? &#x27;Stop voting first&#x27; : &#x27;&#x27;;
+  });
+  $(&#x27;ladder&#x27;).replaceChildren();
+  s.ladder.forEach((step, i) =&gt; {
+    const row = document.createElement(&#x27;li&#x27;);
+    row.className = [i === s.index ? &#x27;current&#x27; : &#x27;&#x27;, i &lt; s.index ? &#x27;passed&#x27; : &#x27;&#x27;, (i + 1) % 5 === 0 ? &#x27;safe&#x27; : &#x27;&#x27;].join(&#x27; &#x27;);
+    const number = document.createElement(&#x27;span&#x27;); number.textContent = step.level;
+    const prize = document.createElement(&#x27;span&#x27;); prize.textContent = money(step.prize);
+    row.append(number, prize); $(&#x27;ladder&#x27;).append(row);
+  });
+  $(&#x27;outcome&#x27;).hidden = ![&#x27;revealed&#x27;, &#x27;won&#x27;, &#x27;lost&#x27;].includes(s.phase);
+  $(&#x27;outcome&#x27;).textContent = s.phase === &#x27;lost&#x27; ? `The correct answer was ${s.correct}. You leave with ${money(s.earned)}.` : `${s.phase === &#x27;won&#x27; ? &#x27;You won!&#x27; : &#x27;Well played!&#x27;} ${money(s.earned)} earned.`;
+  $(&#x27;friend-panel&#x27;).hidden = !s.friend; $(&#x27;friend-text&#x27;).textContent = s.friend;
+  $(&#x27;audience-panel&#x27;).hidden = !s.poll.active;
+  if (lastQr !== s.voteUrl) {
+    lastQr = s.voteUrl; $(&#x27;qr&#x27;).src = &#x27;/api/qr?address=&#x27; + encodeURIComponent(s.voteUrl);
+    $(&#x27;vote-link&#x27;).href = s.voteUrl; $(&#x27;vote-link&#x27;).textContent = s.voteUrl;
+  }
+  renderBars(s.poll); $(&#x27;bars&#x27;).hidden = !isHost &amp;&amp; !s.showResults;
+  $(&#x27;private-results&#x27;).hidden = isHost || s.showResults;
+  if (!isHost) return;
+  $(&#x27;start&#x27;).disabled = !active || s.phase !== &#x27;ready&#x27;;
+  $(&#x27;reveal&#x27;).disabled = !active || s.phase !== &#x27;locked&#x27;;
+  $(&#x27;next&#x27;).disabled = !active || s.phase !== &#x27;revealed&#x27;;
+  $(&#x27;restart&#x27;).disabled = !active;
+  $(&#x27;open-votes&#x27;).disabled = !active || !s.poll.active || s.poll.open || s.phase !== &#x27;question&#x27;;
+  $(&#x27;close-votes&#x27;).disabled = !active || !s.poll.open;
+  $(&#x27;reset-votes&#x27;).disabled = !active || !s.poll.active || s.phase !== &#x27;question&#x27;;
+  $(&#x27;results&#x27;).disabled = !active;
+  $(&#x27;results&#x27;).textContent = s.showResults ? &#x27;Hide projector results&#x27; : &#x27;Show projector results&#x27;;
+  if (!$(&#x27;base-url&#x27;).value) $(&#x27;base-url&#x27;).value = new URL(s.voteUrl).origin;
+  $(&#x27;url-warning&#x27;).textContent = [&#x27;localhost&#x27;, &#x27;127.0.0.1&#x27;, &#x27;0.0.0.0&#x27;].includes(new URL(s.voteUrl).hostname) ? &#x27;Phones cannot use this address. Set your laptop’s Wi-Fi IPv4 address before showing the QR code.&#x27; : &#x27;&#x27;;
+}
+if (isHost) {
+  $(&#x27;login-form&#x27;).onsubmit = event =&gt; {event.preventDefault(); connect($(&#x27;pin&#x27;).value);};
+  [&#x27;start&#x27;, &#x27;reveal&#x27;, &#x27;next&#x27;, &#x27;restart&#x27;, &#x27;fifty&#x27;, &#x27;audience&#x27;, &#x27;friend&#x27;].forEach(name =&gt; $(name).onclick = () =&gt; command(name));
+  $(&#x27;open-votes&#x27;).onclick = () =&gt; command(&#x27;voting&#x27;, true);
+  $(&#x27;close-votes&#x27;).onclick = () =&gt; command(&#x27;voting&#x27;, false);
+  $(&#x27;reset-votes&#x27;).onclick = () =&gt; command(&#x27;resetVotes&#x27;);
+  $(&#x27;results&#x27;).onclick = () =&gt; command(&#x27;results&#x27;, !state.showResults);
+  $(&#x27;url-form&#x27;).onsubmit = event =&gt; {event.preventDefault(); command(&#x27;url&#x27;, $(&#x27;base-url&#x27;).value.trim());};
+  $(&#x27;play-cue&#x27;).onclick = () =&gt; command(&#x27;sound&#x27;, $(&#x27;cue&#x27;).value);
+} else connect();
+</code></pre></article><article id="file-10"><h2>11. public/vote.js</h2><p><strong>File name:</strong> vote.js<br><strong>Create it in:</strong> public folder<br><strong>Full relative path:</strong> <code>millionaire/public/vote.js</code><br><strong>Purpose:</strong> Mobile vote submission, acknowledgement, and reconnect handling.</p><pre><code>let socket, state, voted = null, pending = false, checked = false;
+function render() {
+  if (!state) return;
+  $(&#x27;vote-question&#x27;).textContent = state.phase === &#x27;ready&#x27; ? &#x27;Waiting for the host…&#x27; : state.question.text;
+  $(&#x27;vote-phase&#x27;).textContent = `Question ${state.index + 1} · ${state.poll.open ? &#x27;Voting open&#x27; : &#x27;Voting closed&#x27;}`;
+  $(&#x27;vote-answers&#x27;).replaceChildren();
+  letters.forEach((letter, i) =&gt; {
+    const button = document.createElement(&#x27;button&#x27;); button.className = &#x27;answer&#x27;;
+    const label = document.createElement(&#x27;span&#x27;); label.className = &#x27;letter&#x27;; label.textContent = letter + &#x27;:&#x27;;
+    const text = document.createElement(&#x27;span&#x27;); text.textContent = state.phase === &#x27;ready&#x27; ? &#x27;—&#x27; : state.question.choices[i];
+    button.append(label, text);
+    if (voted === letter) button.classList.add(&#x27;selected&#x27;);
+    if (state.eliminated.includes(letter)) button.classList.add(&#x27;eliminated&#x27;);
+    button.disabled = !socket.connected || !checked || pending || !!voted || !state.poll.open || state.eliminated.includes(letter);
+    button.onclick = () =&gt; submit(letter); $(&#x27;vote-answers&#x27;).append(button);
+  });
+  $(&#x27;message&#x27;).textContent = !socket.connected ? &#x27;Connection lost. Reconnecting…&#x27; : pending ? &#x27;Sending your vote…&#x27; : !checked ? &#x27;Checking your vote…&#x27; : voted ? `Thank you! Your vote for ${voted} is recorded.` : state.poll.open ? &#x27;Voting is open. Choose A, B, C or D.&#x27; : &#x27;Voting is closed. Please wait for the host.&#x27;;
+  renderBars(state.poll); $(&#x27;private-results&#x27;).hidden = state.showResults;
+}
+function submit(choice) {
+  const submittedRound = state.poll.id;
+  pending = true; render();
+  socket.timeout(5000).emit(&#x27;vote&#x27;, {pollId: submittedRound, choice}, (error, result) =&gt; {
+    if (state.poll.id !== submittedRound) return;
+    pending = false;
+    if (result?.choice) voted = result.choice;
+    render();
+    if (error) {socket.emit(&#x27;vote-status&#x27;); $(&#x27;message&#x27;).textContent = &#x27;No confirmation yet. Checking whether your vote arrived…&#x27;;}
+    else if (!result.ok) $(&#x27;message&#x27;).textContent = result.error;
+  });
+}
+async function start() {
+  try {
+    const response = await fetch(&#x27;/api/identity&#x27;);
+    if (!response.ok) throw Error(&#x27;Cannot create voter identity.&#x27;);
+    socket = io();
+    socket.on(&#x27;connect&#x27;, () =&gt; {connection(true); checked = false; socket.emit(&#x27;vote-status&#x27;); render();});
+    socket.on(&#x27;disconnect&#x27;, () =&gt; {connection(false); checked = false; render();});
+    socket.on(&#x27;connect_error&#x27;, () =&gt; {$(&#x27;message&#x27;).textContent = &#x27;Cannot reach the laptop. Check Wi-Fi and wait for reconnection.&#x27;;});
+    socket.on(&#x27;state&#x27;, value =&gt; {
+      const newRound = state?.poll.id !== value.poll.id; state = value;
+      if (newRound) {voted = null; checked = false; pending = false; socket.emit(&#x27;vote-status&#x27;);}
+      render();
+    });
+    socket.on(&#x27;vote-status&#x27;, value =&gt; {
+      if (value.pollId !== state?.poll.id) return;
+      voted = value.choice; checked = true; render();
+    });
+  } catch (error) {$(&#x27;message&#x27;).textContent = error.message + &#x27; Reload the page to retry.&#x27;;}
+}
+start();
+</code></pre></article><article id="file-11"><h2>12. test/game.test.js</h2><p><strong>File name:</strong> game.test.js<br><strong>Create it in:</strong> test folder<br><strong>Full relative path:</strong> <code>millionaire/test/game.test.js</code><br><strong>Purpose:</strong> Twelve automated groups testing real server and Socket.IO clients.</p><pre><code>const {test} = require(&#x27;node:test&#x27;);
+const assert = require(&#x27;node:assert/strict&#x27;);
+const {io: connect} = require(&#x27;socket.io-client&#x27;);
+const {createGameServer, percentages, validateQuestions} = require(&#x27;../server&#x27;);
+const questions = require(&#x27;../questions.json&#x27;);
+async function fixture(t, customQuestions = questions) {
+  const server = createGameServer({pin: &#x27;test-host-code&#x27;, questions: customQuestions});
+  await new Promise(resolve =&gt; server.http.listen(0, &#x27;127.0.0.1&#x27;, resolve));
+  const url = `http://127.0.0.1:${server.http.address().port}`, sockets = [];
+  t.after(async () =&gt; {sockets.forEach(s =&gt; s.disconnect()); await new Promise(resolve =&gt; server.io.close(resolve));});
+  async function client(namespace = &#x27;&#x27;, cookie = &#x27;&#x27;, auth = {}) {
+    const socket = connect(url + namespace, {forceNew: true, extraHeaders: {Cookie: cookie}, auth, reconnection: false});
+    sockets.push(socket);
+    await new Promise((resolve, reject) =&gt; {socket.once(&#x27;connect&#x27;, resolve); socket.once(&#x27;connect_error&#x27;, reject);});
+    return socket;
+  }
+  const host = await client(&#x27;/host&#x27;, &#x27;&#x27;, {pin: &#x27;test-host-code&#x27;});
+  const command = (action, value, revision = server.publicState().revision) =&gt; host.timeout(2000).emitWithAck(&#x27;command&#x27;, {action, value, revision});
+  async function voter(cookie) {
+    if (!cookie) {const res = await fetch(url + &#x27;/api/identity&#x27;); cookie = res.headers.get(&#x27;set-cookie&#x27;).split(&#x27;;&#x27;)[0];}
+    return {socket: await client(&#x27;&#x27;, cookie), cookie};
+  }
+  const vote = (voter, choice, pollId = server.publicState().poll.id) =&gt; voter.socket.timeout(2000).emitWithAck(&#x27;vote&#x27;, {choice, pollId});
+  return {server, url, client, command, voter, vote};
+}
+test(&#x27;percentage rounding sums to 100; empty poll has zeroes&#x27;, () =&gt; {
+  assert.deepEqual(percentages([0, 0, 0, 0]), [0, 0, 0, 0]);
+  assert.deepEqual(percentages([3, 12, 4, 1]), [15, 60, 20, 5]);
+  assert.deepEqual(percentages([1, 1, 1, 0]), [34, 33, 33, 0]);
+});
+test(&#x27;question validation rejects malformed data&#x27;, () =&gt; {
+  assert.throws(() =&gt; validateQuestions([]));
+  assert.throws(() =&gt; validateQuestions([{...questions[0], correct: &#x27;E&#x27;}]));
+  assert.throws(() =&gt; validateQuestions([{...questions[0], choices: [&#x27;one&#x27;]}]))
+});
+test(&#x27;host authentication and answer-key isolation&#x27;, async t =&gt; {
+  const f = await fixture(t);
+  await assert.rejects(f.client(&#x27;/host&#x27;, &#x27;&#x27;, {pin: &#x27;wrong&#x27;}), /Incorrect/);
+  await assert.rejects(f.client(&#x27;/host&#x27;, &#x27;&#x27;, {pin: &#x27;é&#x27;.repeat(14)}), /Incorrect/);
+  const res = await fetch(f.url + &#x27;/questions.json&#x27;); assert.equal(res.status, 404);
+  assert.equal(f.server.publicState().correct, null);
+  assert.equal((await f.command(&#x27;reveal&#x27;)).ok, false);
+});
+test(&#x27;correct answer locks, reveals, then advances; stale command rejected&#x27;, async t =&gt; {
+  const f = await fixture(t);
+  assert.equal((await f.command(&#x27;start&#x27;)).ok, true);
+  const old = f.server.publicState().revision;
+  await f.command(&#x27;lock&#x27;, &#x27;B&#x27;);
+  assert.equal(f.server.publicState().phase, &#x27;locked&#x27;);
+  assert.equal(f.server.publicState().correct, null);
+  assert.equal((await f.command(&#x27;reveal&#x27;, null, old)).ok, false);
+  await f.command(&#x27;reveal&#x27;);
+  assert.equal(f.server.publicState().phase, &#x27;revealed&#x27;);
+  assert.equal(f.server.publicState().earned, 100);
+  await f.command(&#x27;next&#x27;); assert.equal(f.server.publicState().index, 1);
+});
+test(&#x27;wrong answer ends game; restart clears game and restores lifelines&#x27;, async t =&gt; {
+  const f = await fixture(t); await f.command(&#x27;start&#x27;); await f.command(&#x27;friend&#x27;);
+  await f.command(&#x27;lock&#x27;, &#x27;A&#x27;); await f.command(&#x27;reveal&#x27;);
+  assert.equal(f.server.publicState().phase, &#x27;lost&#x27;);
+  assert.equal(f.server.publicState().earned, 0);
+  assert.equal((await f.command(&#x27;next&#x27;)).ok, false);
+  await f.command(&#x27;restart&#x27;);
+  assert.equal(f.server.publicState().phase, &#x27;ready&#x27;);
+  assert.equal(f.server.publicState().used.friend, false);
+});
+test(&#x27;all three lifelines are single-use and 50:50 preserves correct answer&#x27;, async t =&gt; {
+  const f = await fixture(t); await f.command(&#x27;start&#x27;); await f.command(&#x27;fifty&#x27;);
+  const s = f.server.publicState();
+  assert.equal(s.eliminated.length, 2); assert.equal(s.eliminated.includes(&#x27;B&#x27;), false);
+  assert.equal((await f.command(&#x27;lock&#x27;, s.eliminated[0])).ok, false);
+  assert.equal((await f.command(&#x27;fifty&#x27;)).ok, false);
+  await f.command(&#x27;friend&#x27;); assert.match(f.server.publicState().friend, /I think it is/);
+  assert.equal((await f.command(&#x27;friend&#x27;)).ok, false);
+  await f.command(&#x27;audience&#x27;); assert.equal((await f.command(&#x27;audience&#x27;)).ok, false);
+  const v = await f.voter(); assert.equal((await f.vote(v, s.eliminated[0])).ok, false);
+});
+test(&#x27;20 independent phones receive real-time state and produce exact percentages&#x27;, async t =&gt; {
+  const f = await fixture(t); await f.command(&#x27;start&#x27;); await f.command(&#x27;audience&#x27;);
+  const voters = await Promise.all(Array.from({length: 20}, () =&gt; f.voter()));
+  let latest; voters[0].socket.on(&#x27;state&#x27;, s =&gt; {latest = s;});
+  const choices = [...Array(3).fill(&#x27;A&#x27;), ...Array(12).fill(&#x27;B&#x27;), ...Array(4).fill(&#x27;C&#x27;), &#x27;D&#x27;];
+  for (let i = 0; i &lt; voters.length; i++) assert.equal((await f.vote(voters[i], choices[i])).ok, true);
+  assert.deepEqual(f.server.publicState().poll.percentages, [15, 60, 20, 5]);
+  // Flush one acknowledgement through the observer&#x27;s connection after the broadcasts.
+  await f.vote(voters[0], &#x27;A&#x27;);
+  assert.equal(latest.poll.total, 20);
+});
+test(&#x27;duplicate vote rejected after a new socket connects with same cookie&#x27;, async t =&gt; {
+  const f = await fixture(t); await f.command(&#x27;start&#x27;); await f.command(&#x27;audience&#x27;);
+  const a = await f.voter(); assert.equal((await f.vote(a, &#x27;B&#x27;)).ok, true);
+  const b = await f.voter(a.cookie); assert.equal((await f.vote(b, &#x27;C&#x27;)).ok, false);
+  assert.equal(f.server.publicState().poll.total, 1);
+});
+test(&#x27;stop/resume preserves votes; reset invalidates old submissions and permits new vote&#x27;, async t =&gt; {
+  const f = await fixture(t); await f.command(&#x27;start&#x27;); await f.command(&#x27;audience&#x27;);
+  const a = await f.voter(), b = await f.voter(); await f.vote(a, &#x27;A&#x27;);
+  await f.command(&#x27;voting&#x27;, false); assert.equal((await f.vote(b, &#x27;B&#x27;)).ok, false);
+  await f.command(&#x27;voting&#x27;, true); assert.equal((await f.vote(a, &#x27;B&#x27;)).ok, false);
+  const old = f.server.publicState().poll.id;
+  await f.command(&#x27;resetVotes&#x27;); assert.equal(f.server.publicState().poll.total, 0);
+  assert.equal(f.server.publicState().poll.open, false);
+  await f.command(&#x27;voting&#x27;, true);
+  assert.equal((await f.vote(b, &#x27;B&#x27;, old)).ok, false);
+  assert.equal((await f.vote(a, &#x27;B&#x27;)).ok, true);
+  await f.command(&#x27;lock&#x27;, &#x27;B&#x27;); assert.equal((await f.vote(b, &#x27;B&#x27;)).ok, false);
+});
+test(&#x27;private results are omitted from public socket&#x27;, async t =&gt; {
+  const f = await fixture(t); const v = await f.voter();
+  const update = new Promise(resolve =&gt; v.socket.once(&#x27;state&#x27;, resolve));
+  await f.command(&#x27;results&#x27;, false); const state = await update;
+  assert.equal(state.poll.percentages, null); assert.equal(state.poll.counts, null);
+  assert.deepEqual(f.server.publicState().poll.counts, [0,0,0,0]);
+});
+test(&#x27;QR endpoint returns PNG, URL validation rejects script URLs, sounds are served&#x27;, async t =&gt; {
+  const f = await fixture(t);
+  assert.equal((await f.command(&#x27;url&#x27;, &#x27;javascript:alert(1)&#x27;)).ok, false);
+  assert.equal((await f.command(&#x27;url&#x27;, &#x27;http://192.168.1.25:3000&#x27;)).ok, true);
+  assert.equal(f.server.publicState().voteUrl, &#x27;http://192.168.1.25:3000/vote.html&#x27;);
+  const qr = await fetch(f.url + &#x27;/api/qr&#x27;);
+  assert.equal(qr.headers.get(&#x27;content-type&#x27;), &#x27;image/png&#x27;);
+  assert.equal(Buffer.from(await qr.arrayBuffer()).subarray(1,4).toString(), &#x27;PNG&#x27;);
+  for (const name of [&#x27;question&#x27;,&#x27;lock&#x27;,&#x27;correct&#x27;,&#x27;wrong&#x27;,&#x27;lifeline&#x27;,&#x27;next&#x27;,&#x27;win&#x27;,&#x27;lose&#x27;]) {
+    const res = await fetch(f.url + &#x27;/sounds/&#x27; + name + &#x27;.wav&#x27;); assert.equal(res.status, 200);
+    assert.equal(Buffer.from(await res.arrayBuffer()).subarray(0,4).toString(), &#x27;RIFF&#x27;);
+  }
+});
+test(&#x27;winning final question and milestone payout work&#x27;, async t =&gt; {
+  const f = await fixture(t); await f.command(&#x27;start&#x27;);
+  for (let i = 0; i &lt; questions.length; i++) {
+    await f.command(&#x27;lock&#x27;, questions[i].correct); await f.command(&#x27;reveal&#x27;);
+    if (i &lt; questions.length - 1) await f.command(&#x27;next&#x27;);
+  }
+  assert.equal(f.server.publicState().phase, &#x27;won&#x27;);
+  assert.equal(f.server.publicState().earned, 1000000);
+  await f.command(&#x27;restart&#x27;); await f.command(&#x27;start&#x27;);
+  for (let i = 0; i &lt; 5; i++) {await f.command(&#x27;lock&#x27;, questions[i].correct); await f.command(&#x27;reveal&#x27;); await f.command(&#x27;next&#x27;);}
+  await f.command(&#x27;lock&#x27;, &#x27;A&#x27;); await f.command(&#x27;reveal&#x27;);
+  assert.equal(f.server.publicState().earned, 1000);
+});
+</code></pre></article><article id="file-12"><h2>13. .gitignore</h2><p><strong>File name:</strong> .gitignore<br><strong>Create it in:</strong> Project root<br><strong>Full relative path:</strong> <code>millionaire/.gitignore</code><br><strong>Purpose:</strong> Excludes installed dependencies and optional secret files from Git.</p><pre><code>node_modules/
+.env
+</code></pre></article><article id="file-13"><h2>14. package-lock.json</h2><p><strong>File name:</strong> package-lock.json<br><strong>Create it in:</strong> Project root; generated automatically<br><strong>Full relative path:</strong> <code>millionaire/package-lock.json</code><br><strong>Purpose:</strong> Exact tested dependency resolution. Included for npm ci; do not type this by hand.</p><details><summary>Show complete generated package-lock.json</summary><pre><code>{
+  &quot;name&quot;: &quot;millionaire-live&quot;,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;lockfileVersion&quot;: 3,
+  &quot;requires&quot;: true,
+  &quot;packages&quot;: {
+    &quot;&quot;: {
+      &quot;name&quot;: &quot;millionaire-live&quot;,
+      &quot;version&quot;: &quot;1.0.0&quot;,
+      &quot;dependencies&quot;: {
+        &quot;express&quot;: &quot;^5.1.0&quot;,
+        &quot;qrcode&quot;: &quot;^1.5.4&quot;,
+        &quot;socket.io&quot;: &quot;^4.8.1&quot;
+      },
+      &quot;devDependencies&quot;: {
+        &quot;socket.io-client&quot;: &quot;^4.8.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=22&quot;
+      }
+    },
+    &quot;node_modules/@socket.io/component-emitter&quot;: {
+      &quot;version&quot;: &quot;3.1.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/@socket.io/component-emitter/-/component-emitter-3.1.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-9BCxFwvbGg/RsZK9tjXd8s4UcwR0MWeFQ1XEKIQVVvAGJyINdrqKMcTRyLoK8Rse1GjzLV9cwjWV1olXRWEXVA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/@types/cors&quot;: {
+      &quot;version&quot;: &quot;2.8.19&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/@types/cors/-/cors-2.8.19.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-mFNylyeyqN93lfe/9CSxOGREz8cpzAhH+E93xJ4xWQf62V8sQ/24reV2nyzUWM6H6Xji+GGHpkbLe7pVoUEskg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@types/node&quot;: &quot;*&quot;
+      }
+    },
+    &quot;node_modules/@types/node&quot;: {
+      &quot;version&quot;: &quot;26.6.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/@types/node/-/node-26.6.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;undici-types&quot;: &quot;~8.9.0&quot;
+      }
+    },
+    &quot;node_modules/@types/ws&quot;: {
+      &quot;version&quot;: &quot;8.18.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/@types/ws/-/ws-8.18.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@types/node&quot;: &quot;*&quot;
+      }
+    },
+    &quot;node_modules/accepts&quot;: {
+      &quot;version&quot;: &quot;2.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/accepts/-/accepts-2.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;mime-types&quot;: &quot;^3.0.0&quot;,
+        &quot;negotiator&quot;: &quot;^1.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/ansi-regex&quot;: {
+      &quot;version&quot;: &quot;5.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/ansi-styles&quot;: {
+      &quot;version&quot;: &quot;4.3.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;color-convert&quot;: &quot;^2.0.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/chalk/ansi-styles?sponsor=1&quot;
+      }
+    },
+    &quot;node_modules/body-parser&quot;: {
+      &quot;version&quot;: &quot;2.3.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/body-parser/-/body-parser-2.3.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;bytes&quot;: &quot;^3.1.2&quot;,
+        &quot;content-type&quot;: &quot;^2.0.0&quot;,
+        &quot;debug&quot;: &quot;^4.4.3&quot;,
+        &quot;http-errors&quot;: &quot;^2.0.1&quot;,
+        &quot;iconv-lite&quot;: &quot;^0.7.2&quot;,
+        &quot;on-finished&quot;: &quot;^2.4.1&quot;,
+        &quot;qs&quot;: &quot;^6.15.2&quot;,
+        &quot;raw-body&quot;: &quot;^3.0.2&quot;,
+        &quot;type-is&quot;: &quot;^2.1.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/body-parser/node_modules/content-type&quot;: {
+      &quot;version&quot;: &quot;2.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/content-type/-/content-type-2.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/bytes&quot;: {
+      &quot;version&quot;: &quot;3.1.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/call-bind-apply-helpers&quot;: {
+      &quot;version&quot;: &quot;1.0.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;es-errors&quot;: &quot;^1.3.0&quot;,
+        &quot;function-bind&quot;: &quot;^1.1.2&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      }
+    },
+    &quot;node_modules/call-bound&quot;: {
+      &quot;version&quot;: &quot;1.0.4&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;call-bind-apply-helpers&quot;: &quot;^1.0.2&quot;,
+        &quot;get-intrinsic&quot;: &quot;^1.3.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/camelcase&quot;: {
+      &quot;version&quot;: &quot;5.3.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/camelcase/-/camelcase-5.3.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-L28STB170nwWS63UjtlEOE3dldQApaJXZkOI1uMFfzf3rRuPegHaHesyee+YxQ+W6SvRDQV6UrdOdRiR153wJg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6&quot;
+      }
+    },
+    &quot;node_modules/cliui&quot;: {
+      &quot;version&quot;: &quot;6.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/cliui/-/cliui-6.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-t6wbgtoCXvAzst7QgXxJYqPt0usEfbgQdftEPbLL/cvv6HPE5VgvqCuAIDR0NgU52ds6rFwqrgakNLrHEjCbrQ==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;,
+      &quot;dependencies&quot;: {
+        &quot;string-width&quot;: &quot;^4.2.0&quot;,
+        &quot;strip-ansi&quot;: &quot;^6.0.0&quot;,
+        &quot;wrap-ansi&quot;: &quot;^6.2.0&quot;
+      }
+    },
+    &quot;node_modules/color-convert&quot;: {
+      &quot;version&quot;: &quot;2.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;color-name&quot;: &quot;~1.1.4&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=7.0.0&quot;
+      }
+    },
+    &quot;node_modules/color-name&quot;: {
+      &quot;version&quot;: &quot;1.1.4&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/content-disposition&quot;: {
+      &quot;version&quot;: &quot;1.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/content-disposition/-/content-disposition-1.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/content-type&quot;: {
+      &quot;version&quot;: &quot;1.0.5&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/cookie&quot;: {
+      &quot;version&quot;: &quot;0.7.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/cookie/-/cookie-0.7.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/cookie-signature&quot;: {
+      &quot;version&quot;: &quot;1.2.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.2.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-D76uU73ulSXrD1UXF4KE2TMxVVwhsnCgfAyTg9k8P6KGZjlXKrOLe4dJQKI3Bxi5wjesZoFXJWElNWBjPZMbhg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6.6.0&quot;
+      }
+    },
+    &quot;node_modules/cors&quot;: {
+      &quot;version&quot;: &quot;2.8.6&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/cors/-/cors-2.8.6.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;object-assign&quot;: &quot;^4&quot;,
+        &quot;vary&quot;: &quot;^1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.10&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/debug&quot;: {
+      &quot;version&quot;: &quot;4.4.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/debug/-/debug-4.4.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;ms&quot;: &quot;^2.1.3&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6.0&quot;
+      },
+      &quot;peerDependenciesMeta&quot;: {
+        &quot;supports-color&quot;: {
+          &quot;optional&quot;: true
+        }
+      }
+    },
+    &quot;node_modules/decamelize&quot;: {
+      &quot;version&quot;: &quot;1.2.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/decamelize/-/decamelize-1.2.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.10.0&quot;
+      }
+    },
+    &quot;node_modules/depd&quot;: {
+      &quot;version&quot;: &quot;2.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/depd/-/depd-2.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/dijkstrajs&quot;: {
+      &quot;version&quot;: &quot;1.0.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/dijkstrajs/-/dijkstrajs-1.0.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-qiSlmBq9+BCdCA/L46dw8Uy93mloxsPSbwnm5yrKn2vMPiy8KyAskTF6zuV/j5BMsmOGZDPs7KjU+mjb670kfA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/dunder-proto&quot;: {
+      &quot;version&quot;: &quot;1.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;call-bind-apply-helpers&quot;: &quot;^1.0.1&quot;,
+        &quot;es-errors&quot;: &quot;^1.3.0&quot;,
+        &quot;gopd&quot;: &quot;^1.2.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      }
+    },
+    &quot;node_modules/ee-first&quot;: {
+      &quot;version&quot;: &quot;1.1.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/ee-first/-/ee-first-1.1.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/emoji-regex&quot;: {
+      &quot;version&quot;: &quot;8.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/emoji-regex/-/emoji-regex-8.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/encodeurl&quot;: {
+      &quot;version&quot;: &quot;2.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/encodeurl/-/encodeurl-2.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/engine.io&quot;: {
+      &quot;version&quot;: &quot;6.6.11&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/engine.io/-/engine.io-6.6.11.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-z34mGpLoY/82ZbkX1LqGMIaf3wjVMPL6gVC681QDqnmzJ26synI8qAE32P+a7UazmpJZ8UGrFIeAavgRfXzYrg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@types/cors&quot;: &quot;^2.8.12&quot;,
+        &quot;@types/node&quot;: &quot;&gt;=10.0.0&quot;,
+        &quot;@types/ws&quot;: &quot;^8.5.12&quot;,
+        &quot;accepts&quot;: &quot;~1.3.4&quot;,
+        &quot;cookie&quot;: &quot;~0.7.2&quot;,
+        &quot;cors&quot;: &quot;~2.8.5&quot;,
+        &quot;debug&quot;: &quot;~4.4.1&quot;,
+        &quot;engine.io-parser&quot;: &quot;~5.2.1&quot;,
+        &quot;ws&quot;: &quot;~8.21.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=10.2.0&quot;
+      }
+    },
+    &quot;node_modules/engine.io-client&quot;: {
+      &quot;version&quot;: &quot;6.6.7&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/engine.io-client/-/engine.io-client-6.6.7.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-GyAvmPA7gnRCpDQbYACAy79Lg4ewevrmaPzySZz0OVvgyZc3gEfLLqPTYk8wVBScjOEpM9ZO4KryyFpVItjGEA==&quot;,
+      &quot;dev&quot;: true,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@socket.io/component-emitter&quot;: &quot;~3.1.0&quot;,
+        &quot;debug&quot;: &quot;~4.4.1&quot;,
+        &quot;engine.io-parser&quot;: &quot;~5.2.1&quot;,
+        &quot;ws&quot;: &quot;~8.21.0&quot;,
+        &quot;xmlhttprequest-ssl&quot;: &quot;~2.1.1&quot;
+      }
+    },
+    &quot;node_modules/engine.io-parser&quot;: {
+      &quot;version&quot;: &quot;5.2.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/engine.io-parser/-/engine.io-parser-5.2.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-HqD3yTBfnBxIrbnM1DoD6Pcq8NECnh8d4As1Qgh0z5Gg3jRRIqijury0CL3ghu/edArpUYiYqQiDUQBIs4np3Q==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=10.0.0&quot;
+      }
+    },
+    &quot;node_modules/engine.io/node_modules/accepts&quot;: {
+      &quot;version&quot;: &quot;1.3.8&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/accepts/-/accepts-1.3.8.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;mime-types&quot;: &quot;~2.1.34&quot;,
+        &quot;negotiator&quot;: &quot;0.6.3&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/engine.io/node_modules/mime-db&quot;: {
+      &quot;version&quot;: &quot;1.52.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/engine.io/node_modules/mime-types&quot;: {
+      &quot;version&quot;: &quot;2.1.35&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;mime-db&quot;: &quot;1.52.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/engine.io/node_modules/negotiator&quot;: {
+      &quot;version&quot;: &quot;0.6.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/negotiator/-/negotiator-0.6.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/es-define-property&quot;: {
+      &quot;version&quot;: &quot;1.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      }
+    },
+    &quot;node_modules/es-errors&quot;: {
+      &quot;version&quot;: &quot;1.3.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      }
+    },
+    &quot;node_modules/es-object-atoms&quot;: {
+      &quot;version&quot;: &quot;1.1.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;es-errors&quot;: &quot;^1.3.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      }
+    },
+    &quot;node_modules/escape-html&quot;: {
+      &quot;version&quot;: &quot;1.0.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/escape-html/-/escape-html-1.0.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/etag&quot;: {
+      &quot;version&quot;: &quot;1.8.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/etag/-/etag-1.8.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/express&quot;: {
+      &quot;version&quot;: &quot;5.2.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/express/-/express-5.2.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;accepts&quot;: &quot;^2.0.0&quot;,
+        &quot;body-parser&quot;: &quot;^2.2.1&quot;,
+        &quot;content-disposition&quot;: &quot;^1.0.0&quot;,
+        &quot;content-type&quot;: &quot;^1.0.5&quot;,
+        &quot;cookie&quot;: &quot;^0.7.1&quot;,
+        &quot;cookie-signature&quot;: &quot;^1.2.1&quot;,
+        &quot;debug&quot;: &quot;^4.4.0&quot;,
+        &quot;depd&quot;: &quot;^2.0.0&quot;,
+        &quot;encodeurl&quot;: &quot;^2.0.0&quot;,
+        &quot;escape-html&quot;: &quot;^1.0.3&quot;,
+        &quot;etag&quot;: &quot;^1.8.1&quot;,
+        &quot;finalhandler&quot;: &quot;^2.1.0&quot;,
+        &quot;fresh&quot;: &quot;^2.0.0&quot;,
+        &quot;http-errors&quot;: &quot;^2.0.0&quot;,
+        &quot;merge-descriptors&quot;: &quot;^2.0.0&quot;,
+        &quot;mime-types&quot;: &quot;^3.0.0&quot;,
+        &quot;on-finished&quot;: &quot;^2.4.1&quot;,
+        &quot;once&quot;: &quot;^1.4.0&quot;,
+        &quot;parseurl&quot;: &quot;^1.3.3&quot;,
+        &quot;proxy-addr&quot;: &quot;^2.0.7&quot;,
+        &quot;qs&quot;: &quot;^6.14.0&quot;,
+        &quot;range-parser&quot;: &quot;^1.2.1&quot;,
+        &quot;router&quot;: &quot;^2.2.0&quot;,
+        &quot;send&quot;: &quot;^1.1.0&quot;,
+        &quot;serve-static&quot;: &quot;^2.2.0&quot;,
+        &quot;statuses&quot;: &quot;^2.0.1&quot;,
+        &quot;type-is&quot;: &quot;^2.0.1&quot;,
+        &quot;vary&quot;: &quot;^1.1.2&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/finalhandler&quot;: {
+      &quot;version&quot;: &quot;2.1.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/finalhandler/-/finalhandler-2.1.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-S8KoZgRZN+a5rNwqTxlZZePjT/4cnm0ROV70LedRHZ0p8u9fRID0hJUZQpkKLzro8LfmC8sx23bY6tVNxv8pQA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;debug&quot;: &quot;^4.4.0&quot;,
+        &quot;encodeurl&quot;: &quot;^2.0.0&quot;,
+        &quot;escape-html&quot;: &quot;^1.0.3&quot;,
+        &quot;on-finished&quot;: &quot;^2.4.1&quot;,
+        &quot;parseurl&quot;: &quot;^1.3.3&quot;,
+        &quot;statuses&quot;: &quot;^2.0.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 18.0.0&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/find-up&quot;: {
+      &quot;version&quot;: &quot;4.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/find-up/-/find-up-4.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-PpOwAdQ/YlXQ2vj8a3h8IipDuYRi3wceVQQGYWxNINccq40Anw7BlsEXCMbt1Zt+OLA6Fq9suIpIWD0OsnISlw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;locate-path&quot;: &quot;^5.0.0&quot;,
+        &quot;path-exists&quot;: &quot;^4.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/forwarded&quot;: {
+      &quot;version&quot;: &quot;0.2.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/forwarded/-/forwarded-0.2.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/fresh&quot;: {
+      &quot;version&quot;: &quot;2.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/fresh/-/fresh-2.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/function-bind&quot;: {
+      &quot;version&quot;: &quot;1.1.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/get-caller-file&quot;: {
+      &quot;version&quot;: &quot;2.0.5&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/get-caller-file/-/get-caller-file-2.0.5.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;6.* || 8.* || &gt;= 10.*&quot;
+      }
+    },
+    &quot;node_modules/get-intrinsic&quot;: {
+      &quot;version&quot;: &quot;1.3.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;call-bind-apply-helpers&quot;: &quot;^1.0.2&quot;,
+        &quot;es-define-property&quot;: &quot;^1.0.1&quot;,
+        &quot;es-errors&quot;: &quot;^1.3.0&quot;,
+        &quot;es-object-atoms&quot;: &quot;^1.1.1&quot;,
+        &quot;function-bind&quot;: &quot;^1.1.2&quot;,
+        &quot;get-proto&quot;: &quot;^1.0.1&quot;,
+        &quot;gopd&quot;: &quot;^1.2.0&quot;,
+        &quot;has-symbols&quot;: &quot;^1.1.0&quot;,
+        &quot;hasown&quot;: &quot;^2.0.2&quot;,
+        &quot;math-intrinsics&quot;: &quot;^1.1.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/get-proto&quot;: {
+      &quot;version&quot;: &quot;1.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;dunder-proto&quot;: &quot;^1.0.1&quot;,
+        &quot;es-object-atoms&quot;: &quot;^1.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      }
+    },
+    &quot;node_modules/gopd&quot;: {
+      &quot;version&quot;: &quot;1.2.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/has-symbols&quot;: {
+      &quot;version&quot;: &quot;1.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/hasown&quot;: {
+      &quot;version&quot;: &quot;2.0.4&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;function-bind&quot;: &quot;^1.1.2&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      }
+    },
+    &quot;node_modules/http-errors&quot;: {
+      &quot;version&quot;: &quot;2.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;depd&quot;: &quot;~2.0.0&quot;,
+        &quot;inherits&quot;: &quot;~2.0.4&quot;,
+        &quot;setprototypeof&quot;: &quot;~1.2.0&quot;,
+        &quot;statuses&quot;: &quot;~2.0.2&quot;,
+        &quot;toidentifier&quot;: &quot;~1.0.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/iconv-lite&quot;: {
+      &quot;version&quot;: &quot;0.7.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.7.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;safer-buffer&quot;: &quot;&gt;= 2.1.2 &lt; 3.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.10.0&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/inherits&quot;: {
+      &quot;version&quot;: &quot;2.0.4&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;
+    },
+    &quot;node_modules/ipaddr.js&quot;: {
+      &quot;version&quot;: &quot;1.9.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-1.9.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.10&quot;
+      }
+    },
+    &quot;node_modules/is-fullwidth-code-point&quot;: {
+      &quot;version&quot;: &quot;3.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/is-fullwidth-code-point/-/is-fullwidth-code-point-3.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/is-promise&quot;: {
+      &quot;version&quot;: &quot;4.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/is-promise/-/is-promise-4.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-hvpoI6korhJMnej285dSg6nu1+e6uxs7zG3BYAm5byqDsgJNWwxzM6z6iZiAgQR4TJ30JmBTOwqZUw3WlyH3AQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/locate-path&quot;: {
+      &quot;version&quot;: &quot;5.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/locate-path/-/locate-path-5.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-t7hw9pI+WvuwNJXwk5zVHpyhIqzg2qTlklJOf0mVxGSbe3Fp2VieZcduNYjaLDoy6p9uGpQEGWG87WpMKlNq8g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;p-locate&quot;: &quot;^4.1.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/math-intrinsics&quot;: {
+      &quot;version&quot;: &quot;1.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      }
+    },
+    &quot;node_modules/media-typer&quot;: {
+      &quot;version&quot;: &quot;1.1.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/media-typer/-/media-typer-1.1.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-yz3xRaG20c6/BOzvYoDaGtPmGscs7YivItZEEqe6GbwNfHuxu9YNmvnEkMzKldAGY4/80pRcQRZSEnhquk9XuQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/merge-descriptors&quot;: {
+      &quot;version&quot;: &quot;2.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/merge-descriptors/-/merge-descriptors-2.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-Snk314V5ayFLhp3fkUREub6WtjBfPdCPY1Ln8/8munuLuiYhsABgBVWsozAG+MWMbVEvcdcpbi9R7ww22l9Q3g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/sindresorhus&quot;
+      }
+    },
+    &quot;node_modules/mime-db&quot;: {
+      &quot;version&quot;: &quot;1.54.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/mime-db/-/mime-db-1.54.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/mime-types&quot;: {
+      &quot;version&quot;: &quot;3.0.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/mime-types/-/mime-types-3.0.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-Lbgzdk0h4juoQ9fCKXW4by0UJqj+nOOrI9MJ1sSj4nI8aI2eo1qmvQEie4VD1glsS250n15LsWsYtCugiStS5A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;mime-db&quot;: &quot;^1.54.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/ms&quot;: {
+      &quot;version&quot;: &quot;2.1.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/ms/-/ms-2.1.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/negotiator&quot;: {
+      &quot;version&quot;: &quot;1.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/negotiator/-/negotiator-1.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-NMPBRMJgiQHjbd8phG3Vebdx4kZ1H121rbl5IkMqeOsahptB9BKo/d7oJ3zTXqTgagn2bWlNSXkh0QUGM31RYg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;content-type&quot;: &quot;^2.1.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/negotiator/node_modules/content-type&quot;: {
+      &quot;version&quot;: &quot;2.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/content-type/-/content-type-2.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/object-assign&quot;: {
+      &quot;version&quot;: &quot;4.1.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.10.0&quot;
+      }
+    },
+    &quot;node_modules/object-inspect&quot;: {
+      &quot;version&quot;: &quot;1.13.4&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/object-inspect/-/object-inspect-1.13.4.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/on-finished&quot;: {
+      &quot;version&quot;: &quot;2.4.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/on-finished/-/on-finished-2.4.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-oVlzkg3ENAhCk2zdv7IJwd/QUD4z2RxRwpkcGY8psCVcCYZNq4wYnVWALHM+brtuJjePWiYF/ClmuDr8Ch5+kg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;ee-first&quot;: &quot;1.1.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/once&quot;: {
+      &quot;version&quot;: &quot;1.4.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/once/-/once-1.4.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;,
+      &quot;dependencies&quot;: {
+        &quot;wrappy&quot;: &quot;1&quot;
+      }
+    },
+    &quot;node_modules/p-limit&quot;: {
+      &quot;version&quot;: &quot;2.3.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/p-limit/-/p-limit-2.3.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-//88mFWSJx8lxCzwdAABTJL2MyWB12+eIY7MDL2SqLmAkeKU9qxRvWuSyTjm3FUmpBEMuFfckAIqEaVGUDxb6w==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;p-try&quot;: &quot;^2.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/sindresorhus&quot;
+      }
+    },
+    &quot;node_modules/p-locate&quot;: {
+      &quot;version&quot;: &quot;4.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/p-locate/-/p-locate-4.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-R79ZZ/0wAxKGu3oYMlz8jy/kbhsNrS7SKZ7PxEHBgJ5+F2mtFW2fK2cOtBh1cHYkQsbzFV7I+EoRKe6Yt0oK7A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;p-limit&quot;: &quot;^2.2.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/p-try&quot;: {
+      &quot;version&quot;: &quot;2.2.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/p-try/-/p-try-2.2.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-R4nPAVTAU0B9D35/Gk3uJf/7XYbQcyohSKdvAxIRSNghFl4e71hVoGnBNQz9cWaXxO2I10KTC+3jMdvvoKw6dQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6&quot;
+      }
+    },
+    &quot;node_modules/parseurl&quot;: {
+      &quot;version&quot;: &quot;1.3.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/path-exists&quot;: {
+      &quot;version&quot;: &quot;4.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/path-exists/-/path-exists-4.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/path-to-regexp&quot;: {
+      &quot;version&quot;: &quot;8.4.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-8.4.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-qRcuIdP69NPm4qbACK+aDogI5CBDMi1jKe0ry5rSQJz8JVLsC7jV8XpiJjGRLLol3N+R5ihGYcrPLTno6pAdBA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/pngjs&quot;: {
+      &quot;version&quot;: &quot;5.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/pngjs/-/pngjs-5.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=10.13.0&quot;
+      }
+    },
+    &quot;node_modules/proxy-addr&quot;: {
+      &quot;version&quot;: &quot;2.0.8&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.8.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-5nnx0yGyVUcY6t9RnWcARWtwT9F1D8O9rt08htPvnd49W1IgZtmLkhu9WfMzQj1cFxjHIO6connUNVW5k7AVyQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;forwarded&quot;: &quot;0.2.0&quot;,
+        &quot;ipaddr.js&quot;: &quot;1.9.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.10&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/qrcode&quot;: {
+      &quot;version&quot;: &quot;1.5.4&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/qrcode/-/qrcode-1.5.4.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-1ca71Zgiu6ORjHqFBDpnSMTR2ReToX4l1Au1VFLyVeBTFavzQnv5JxMFr3ukHVKpSrSA2MCk0lNJSykjUfz7Zg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;dijkstrajs&quot;: &quot;^1.0.1&quot;,
+        &quot;pngjs&quot;: &quot;^5.0.0&quot;,
+        &quot;yargs&quot;: &quot;^15.3.1&quot;
+      },
+      &quot;bin&quot;: {
+        &quot;qrcode&quot;: &quot;bin/qrcode&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=10.13.0&quot;
+      }
+    },
+    &quot;node_modules/qs&quot;: {
+      &quot;version&quot;: &quot;6.16.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/qs/-/qs-6.16.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==&quot;,
+      &quot;license&quot;: &quot;BSD-3-Clause&quot;,
+      &quot;dependencies&quot;: {
+        &quot;es-define-property&quot;: &quot;^1.0.1&quot;,
+        &quot;side-channel&quot;: &quot;^1.1.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.6&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/range-parser&quot;: {
+      &quot;version&quot;: &quot;1.3.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/range-parser/-/range-parser-1.3.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-hek2mFQpPuI4E1BBKrSto+BU3e3x4xuarsbiwr3+lf7p44juvFMV0XFWQAP3xUyqXA4RrXLIoaSUGbSt056ZMw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/raw-body&quot;: {
+      &quot;version&quot;: &quot;3.0.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/raw-body/-/raw-body-3.0.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;bytes&quot;: &quot;~3.1.2&quot;,
+        &quot;http-errors&quot;: &quot;~2.0.1&quot;,
+        &quot;iconv-lite&quot;: &quot;~0.7.0&quot;,
+        &quot;unpipe&quot;: &quot;~1.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.10&quot;
+      }
+    },
+    &quot;node_modules/require-directory&quot;: {
+      &quot;version&quot;: &quot;2.1.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/require-directory/-/require-directory-2.1.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.10.0&quot;
+      }
+    },
+    &quot;node_modules/require-main-filename&quot;: {
+      &quot;version&quot;: &quot;2.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/require-main-filename/-/require-main-filename-2.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-NKN5kMDylKuldxYLSUfrbo5Tuzh4hd+2E8NPPX02mZtn1VuREQToYe/ZdlJy+J3uCpfaiGF05e7B8W0iXbQHmg==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;
+    },
+    &quot;node_modules/router&quot;: {
+      &quot;version&quot;: &quot;2.2.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/router/-/router-2.2.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;debug&quot;: &quot;^4.4.0&quot;,
+        &quot;depd&quot;: &quot;^2.0.0&quot;,
+        &quot;is-promise&quot;: &quot;^4.0.0&quot;,
+        &quot;parseurl&quot;: &quot;^1.3.3&quot;,
+        &quot;path-to-regexp&quot;: &quot;^8.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 18&quot;
+      }
+    },
+    &quot;node_modules/safer-buffer&quot;: {
+      &quot;version&quot;: &quot;2.1.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/send&quot;: {
+      &quot;version&quot;: &quot;1.2.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/send/-/send-1.2.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;debug&quot;: &quot;^4.4.3&quot;,
+        &quot;encodeurl&quot;: &quot;^2.0.0&quot;,
+        &quot;escape-html&quot;: &quot;^1.0.3&quot;,
+        &quot;etag&quot;: &quot;^1.8.1&quot;,
+        &quot;fresh&quot;: &quot;^2.0.0&quot;,
+        &quot;http-errors&quot;: &quot;^2.0.1&quot;,
+        &quot;mime-types&quot;: &quot;^3.0.2&quot;,
+        &quot;ms&quot;: &quot;^2.1.3&quot;,
+        &quot;on-finished&quot;: &quot;^2.4.1&quot;,
+        &quot;range-parser&quot;: &quot;^1.2.1&quot;,
+        &quot;statuses&quot;: &quot;^2.0.2&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/serve-static&quot;: {
+      &quot;version&quot;: &quot;2.2.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/serve-static/-/serve-static-2.2.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-xRXBn0pPqQTVQiC8wyQrKs2MOlX24zQ0POGaj0kultvoOCstBQM5yvOhAVSUwOMjQtTvsPWoNCHfPGwaaQJhTw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;encodeurl&quot;: &quot;^2.0.0&quot;,
+        &quot;escape-html&quot;: &quot;^1.0.3&quot;,
+        &quot;parseurl&quot;: &quot;^1.3.3&quot;,
+        &quot;send&quot;: &quot;^1.2.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/set-blocking&quot;: {
+      &quot;version&quot;: &quot;2.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/set-blocking/-/set-blocking-2.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-KiKBS8AnWGEyLzofFfmvKwpdPzqiy16LvQfK3yv/fVH7Bj13/wl3JSR1J+rfgRE9q7xUJK4qvgS8raSOeLUehw==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;
+    },
+    &quot;node_modules/setprototypeof&quot;: {
+      &quot;version&quot;: &quot;1.2.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.2.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;
+    },
+    &quot;node_modules/side-channel&quot;: {
+      &quot;version&quot;: &quot;1.1.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/side-channel/-/side-channel-1.1.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-6x6dK6zJdpTzF4sQeNYxwtvBzf6Eg4GtlesS94HOvTudUeyK2WXAaIfmDgsyslYrRBeFIlsi54AYsFGUuhmvrQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;es-errors&quot;: &quot;^1.3.0&quot;,
+        &quot;object-inspect&quot;: &quot;^1.13.4&quot;,
+        &quot;side-channel-list&quot;: &quot;^1.0.1&quot;,
+        &quot;side-channel-map&quot;: &quot;^1.0.1&quot;,
+        &quot;side-channel-weakmap&quot;: &quot;^1.0.2&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/side-channel-list&quot;: {
+      &quot;version&quot;: &quot;1.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/side-channel-list/-/side-channel-list-1.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-mjn/0bi/oUURjc5Xl7IaWi/OJJJumuoJFQJfDDyO46+hBWsfaVM65TBHq2eoZBhzl9EchxOijpkbRC8SVBQU0w==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;es-errors&quot;: &quot;^1.3.0&quot;,
+        &quot;object-inspect&quot;: &quot;^1.13.4&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/side-channel-map&quot;: {
+      &quot;version&quot;: &quot;1.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/side-channel-map/-/side-channel-map-1.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-VCjCNfgMsby3tTdo02nbjtM/ewra6jPHmpThenkTYh8pG9ucZ/1P8So4u4FGBek/BjpOVsDCMoLA/iuBKIFXRA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;call-bound&quot;: &quot;^1.0.2&quot;,
+        &quot;es-errors&quot;: &quot;^1.3.0&quot;,
+        &quot;get-intrinsic&quot;: &quot;^1.2.5&quot;,
+        &quot;object-inspect&quot;: &quot;^1.13.3&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/side-channel-weakmap&quot;: {
+      &quot;version&quot;: &quot;1.0.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/side-channel-weakmap/-/side-channel-weakmap-1.0.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-WPS/HvHQTYnHisLo9McqBHOJk2FkHO/tlpvldyrnem4aeQp4hai3gythswg6p01oSoTl58rcpiFAjF2br2Ak2A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;call-bound&quot;: &quot;^1.0.2&quot;,
+        &quot;es-errors&quot;: &quot;^1.3.0&quot;,
+        &quot;get-intrinsic&quot;: &quot;^1.2.5&quot;,
+        &quot;object-inspect&quot;: &quot;^1.13.3&quot;,
+        &quot;side-channel-map&quot;: &quot;^1.0.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.4&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;https://github.com/sponsors/ljharb&quot;
+      }
+    },
+    &quot;node_modules/socket.io&quot;: {
+      &quot;version&quot;: &quot;4.8.4&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/socket.io/-/socket.io-4.8.4.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-9ZV9zg8vN8hO3Y25DhR7nUkJ1VDnBhq5O/JrXhFT9s6+F0gqytSASTHVfCFc2mJXaTfARroErplXlzFWwETZqQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;accepts&quot;: &quot;~1.3.4&quot;,
+        &quot;cors&quot;: &quot;~2.8.5&quot;,
+        &quot;debug&quot;: &quot;~4.4.1&quot;,
+        &quot;engine.io&quot;: &quot;~6.6.0&quot;,
+        &quot;socket.io-adapter&quot;: &quot;~2.5.2&quot;,
+        &quot;socket.io-parser&quot;: &quot;~4.2.4&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=10.2.0&quot;
+      }
+    },
+    &quot;node_modules/socket.io-adapter&quot;: {
+      &quot;version&quot;: &quot;2.5.8&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/socket.io-adapter/-/socket.io-adapter-2.5.8.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-6Oy52pbg+kvdCVvjcN+FnY7BvxZ7cIHNScbvztT/It5d0vbwoJoVZmF2gjJmnV0/4WlXRfG15zc45ySk9Ah8bw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;debug&quot;: &quot;~4.4.1&quot;,
+        &quot;ws&quot;: &quot;~8.21.0&quot;
+      }
+    },
+    &quot;node_modules/socket.io-client&quot;: {
+      &quot;version&quot;: &quot;4.8.4&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/socket.io-client/-/socket.io-client-4.8.4.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-7wjKAvVXYOJsbmUgkWbnhPD4bFpkqrUR0++XOjpGFmqDqsqV1CI93VTraeExLxpjxEqrWgFoSRZu1ihjLWfkAA==&quot;,
+      &quot;dev&quot;: true,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@socket.io/component-emitter&quot;: &quot;~3.1.0&quot;,
+        &quot;debug&quot;: &quot;~4.4.1&quot;,
+        &quot;engine.io-client&quot;: &quot;~6.6.1&quot;,
+        &quot;socket.io-parser&quot;: &quot;~4.2.4&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=10.0.0&quot;
+      }
+    },
+    &quot;node_modules/socket.io-parser&quot;: {
+      &quot;version&quot;: &quot;4.2.7&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/socket.io-parser/-/socket.io-parser-4.2.7.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-IH/iSeO9T6gz1KkFleGDWkG9N3dl4jXVYUtMhIqH10Md0ttMer8nUNWiP1DKuNrybD2xBrixLJdCC9J6ECoYkg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@socket.io/component-emitter&quot;: &quot;~3.1.0&quot;,
+        &quot;debug&quot;: &quot;~4.4.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=10.0.0&quot;
+      }
+    },
+    &quot;node_modules/socket.io/node_modules/accepts&quot;: {
+      &quot;version&quot;: &quot;1.3.8&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/accepts/-/accepts-1.3.8.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;mime-types&quot;: &quot;~2.1.34&quot;,
+        &quot;negotiator&quot;: &quot;0.6.3&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/socket.io/node_modules/mime-db&quot;: {
+      &quot;version&quot;: &quot;1.52.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/socket.io/node_modules/mime-types&quot;: {
+      &quot;version&quot;: &quot;2.1.35&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;mime-db&quot;: &quot;1.52.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/socket.io/node_modules/negotiator&quot;: {
+      &quot;version&quot;: &quot;0.6.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/negotiator/-/negotiator-0.6.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.6&quot;
+      }
+    },
+    &quot;node_modules/statuses&quot;: {
+      &quot;version&quot;: &quot;2.0.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/statuses/-/statuses-2.0.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/string-width&quot;: {
+      &quot;version&quot;: &quot;4.2.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;emoji-regex&quot;: &quot;^8.0.0&quot;,
+        &quot;is-fullwidth-code-point&quot;: &quot;^3.0.0&quot;,
+        &quot;strip-ansi&quot;: &quot;^6.0.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/strip-ansi&quot;: {
+      &quot;version&quot;: &quot;6.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;ansi-regex&quot;: &quot;^5.0.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/toidentifier&quot;: {
+      &quot;version&quot;: &quot;1.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/toidentifier/-/toidentifier-1.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.6&quot;
+      }
+    },
+    &quot;node_modules/type-is&quot;: {
+      &quot;version&quot;: &quot;2.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/type-is/-/type-is-2.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;content-type&quot;: &quot;^2.0.0&quot;,
+        &quot;media-typer&quot;: &quot;^1.1.0&quot;,
+        &quot;mime-types&quot;: &quot;^3.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/type-is/node_modules/content-type&quot;: {
+      &quot;version&quot;: &quot;2.1.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/content-type/-/content-type-2.1.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;type&quot;: &quot;opencollective&quot;,
+        &quot;url&quot;: &quot;https://opencollective.com/express&quot;
+      }
+    },
+    &quot;node_modules/undici-types&quot;: {
+      &quot;version&quot;: &quot;8.9.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/undici-types/-/undici-types-8.9.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/unpipe&quot;: {
+      &quot;version&quot;: &quot;1.0.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/unpipe/-/unpipe-1.0.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/vary&quot;: {
+      &quot;version&quot;: &quot;1.1.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/vary/-/vary-1.1.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;= 0.8&quot;
+      }
+    },
+    &quot;node_modules/which-module&quot;: {
+      &quot;version&quot;: &quot;2.0.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/which-module/-/which-module-2.0.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-iBdZ57RDvnOR9AGBhML2vFZf7h8vmBjhoaZqODJBFWHVtKkDmKuHai3cx5PgVMrX5YDNp27AofYbAwctSS+vhQ==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;
+    },
+    &quot;node_modules/wrap-ansi&quot;: {
+      &quot;version&quot;: &quot;6.2.0&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-6.2.0.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-r6lPcBGxZXlIcymEu7InxDMhdW0KDxpLgoFLcguasxCaJ/SOIZwINatK9KY/tf+ZrlywOKU0UDj3ATXUBfxJXA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;ansi-styles&quot;: &quot;^4.0.0&quot;,
+        &quot;string-width&quot;: &quot;^4.1.0&quot;,
+        &quot;strip-ansi&quot;: &quot;^6.0.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/wrappy&quot;: {
+      &quot;version&quot;: &quot;1.0.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;
+    },
+    &quot;node_modules/ws&quot;: {
+      &quot;version&quot;: &quot;8.21.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/ws/-/ws-8.21.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=10.0.0&quot;
+      },
+      &quot;peerDependencies&quot;: {
+        &quot;bufferutil&quot;: &quot;^4.0.1&quot;,
+        &quot;utf-8-validate&quot;: &quot;&gt;=5.0.2&quot;
+      },
+      &quot;peerDependenciesMeta&quot;: {
+        &quot;bufferutil&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;utf-8-validate&quot;: {
+          &quot;optional&quot;: true
+        }
+      }
+    },
+    &quot;node_modules/xmlhttprequest-ssl&quot;: {
+      &quot;version&quot;: &quot;2.1.2&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/xmlhttprequest-ssl/-/xmlhttprequest-ssl-2.1.2.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-TEU+nJVUUnA4CYJFLvK5X9AOeH4KvDvhIfm0vV1GaQRtchnG0hgK5p8hw/xjv8cunWYCsiPCSDzObPyhEwq3KQ==&quot;,
+      &quot;dev&quot;: true,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.4.0&quot;
+      }
+    },
+    &quot;node_modules/y18n&quot;: {
+      &quot;version&quot;: &quot;4.0.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/y18n/-/y18n-4.0.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-JKhqTOwSrqNA1NY5lSztJ1GrBiUodLMmIZuLiDaMRJ+itFd+ABVE8XBjOvIWL+rSqNDC74LCSFmlb/U4UZ4hJQ==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;
+    },
+    &quot;node_modules/yargs&quot;: {
+      &quot;version&quot;: &quot;15.4.1&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/yargs/-/yargs-15.4.1.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-aePbxDmcYW++PaqBsJ+HYUFwCdv4LVvdnhBy78E57PIor8/OVvhMrADFFEDh8DHDFRv/O9i3lPhsENjO7QX0+A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;cliui&quot;: &quot;^6.0.0&quot;,
+        &quot;decamelize&quot;: &quot;^1.2.0&quot;,
+        &quot;find-up&quot;: &quot;^4.1.0&quot;,
+        &quot;get-caller-file&quot;: &quot;^2.0.1&quot;,
+        &quot;require-directory&quot;: &quot;^2.1.1&quot;,
+        &quot;require-main-filename&quot;: &quot;^2.0.0&quot;,
+        &quot;set-blocking&quot;: &quot;^2.0.0&quot;,
+        &quot;string-width&quot;: &quot;^4.2.0&quot;,
+        &quot;which-module&quot;: &quot;^2.0.0&quot;,
+        &quot;y18n&quot;: &quot;^4.0.0&quot;,
+        &quot;yargs-parser&quot;: &quot;^18.1.2&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=8&quot;
+      }
+    },
+    &quot;node_modules/yargs-parser&quot;: {
+      &quot;version&quot;: &quot;18.1.3&quot;,
+      &quot;resolved&quot;: &quot;https://registry.npmjs.org/yargs-parser/-/yargs-parser-18.1.3.tgz&quot;,
+      &quot;integrity&quot;: &quot;sha512-o50j0JeToy/4K6OZcaQmW6lyXXKhq7csREXcDwk2omFPJEwUNOVtJKvmDr9EI1fAJZUyZcRF7kxGBWmRXudrCQ==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;,
+      &quot;dependencies&quot;: {
+        &quot;camelcase&quot;: &quot;^5.0.0&quot;,
+        &quot;decamelize&quot;: &quot;^1.2.0&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6&quot;
+      }
+    }
+  }
+}
+</code></pre></details></article></section><h2>Final folder structure</h2>
+<pre><code class="language-text">millionaire/
+  package.json
+  package-lock.json             generated dependency lock, included
+  server.js
+  questions.json
+  generate-sounds.js
+  .gitignore
+  README.md                     this guide
+  COMPLETE_GUIDE.html            guide plus every complete source file
+  projector-preview.png          visual preview, if present
+  public/
+    index.html
+    host.html
+    vote.html
+    style.css
+    shared.js
+    game.js
+    vote.js
+    sounds/
+      question.wav
+      lock.wav
+      correct.wav
+      wrong.wav
+      lifeline.wav
+      next.wav
+      win.wav
+      lose.wav
+  test/
+    game.test.js
+  node_modules/                 created by npm install; not in ZIP
+</code></pre>
+<p>No <code>images</code> folder is required. The visual design is CSS and the QR is generated dynamically by <code>/api/qr</code>. Audio binaries are included and reproducible from generate-sounds.js. package-lock.json is included; npm generates it on the empty-folder route, so there is no need to type it manually.</p>
+<h2>How to Run the Game on Event Day</h2>
+<ul>
+<li>Connect laptop and audience phones to the tested Wi-Fi; plug in laptop power.</li>
+<li>In the millionaire folder run <code>npm start</code>; leave that terminal open.</li>
+<li>Open host.html, enter the terminal's host code, and set the current Wi-Fi IP and port.</li>
+<li>Use Extend display; put the public game window on the projector.</li>
+<li>Enable sound on the projector only; test volume and QR scanning with two phones.</li>
+<li>Restart the rehearsal game with the host button, then click Start game.</li>
+<li>Lock → Reveal → Next; use lifelines before locking.</li>
+<li>For audience help: Ask the Audience → allow votes → Stop voting → discuss results.</li>
+<li>Keep the laptop awake and the server running until the event finishes.</li>
+</ul></main></body></html>
