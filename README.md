@@ -473,3 +473,14 @@ No `images` folder is required. The visual design is CSS and the QR is generated
 - Lock → Reveal → Next; use lifelines before locking.
 - For audience help: Ask the Audience → allow votes → Stop voting → discuss results.
 - Keep the laptop awake and the server running until the event finishes.
+
+
+## Usage Notice
+
+Copyright © 2026 Aseel Hamed. All Rights Reserved.
+
+This project is publicly available for viewing and portfolio purposes only.
+
+Copying, reproducing, redistributing, modifying, or using any part of this project in another academic, personal, or commercial project without explicit permission is prohibited.
+
+This repository is not open source and no license is granted for reuse of the source code.
